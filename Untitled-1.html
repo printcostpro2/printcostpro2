@@ -1,0 +1,2327 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PrintCost Pro - Calculadora MPS y Gestor de Costes por Copia</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#035381',
+                            800: '#075985',
+                            900: '#0c4a6e',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- FontAwesome 6 Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- html2pdf.js CDN for commercial proposal PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(8px);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col text-slate-800 antialiased selection:bg-brand-500 selection:text-white">
+
+    <!-- TOP NAVIGATION BAR -->
+    <header class="bg-slate-900 text-white sticky top-0 z-30 shadow-md border-b border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- Logo & Brand -->
+                <div class="flex items-center gap-3 cursor-pointer" onclick="navigateTo('dashboard')">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-brand-500/30">
+                        <i class="fa-solid fa-print text-xl text-white"></i>
+                    </div>
+                    <div>
+                        <span class="font-extrabold text-lg tracking-tight text-white flex items-center gap-2">
+                            PrintCost <span class="bg-brand-500 text-white text-xs px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">PRO</span>
+                        </span>
+                        <p class="text-xs text-slate-400 hidden sm:block">Gestión de Servicios Gestionados de Impresión (MPS)</p>
+                    </div>
+                </div>
+
+                <!-- Desktop Main Navigation Menu -->
+                <nav class="hidden lg:flex items-center space-x-1">
+                    <button onclick="navigateTo('dashboard')" id="nav-dashboard" class="nav-btn px-3.5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 text-slate-300 hover:text-white hover:bg-slate-800">
+                        <i class="fa-solid fa-chart-pie"></i> Dashboard
+                    </button>
+                    <button onclick="navigateTo('catalog')" id="nav-catalog" class="nav-btn px-3.5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 text-slate-300 hover:text-white hover:bg-slate-800">
+                        <i class="fa-solid fa-boxes-stacked"></i> Catálogo de Equipos
+                    </button>
+                    <button onclick="navigateTo('consumables')" id="nav-consumables" class="nav-btn px-3.5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 text-slate-300 hover:text-white hover:bg-slate-800">
+                        <i class="fa-solid fa-box-archive text-amber-400"></i> Consumibles
+                    </button>
+                    <button onclick="navigateTo('top10')" id="nav-top10" class="nav-btn px-3.5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 text-slate-300 hover:text-white hover:bg-slate-800">
+                        <i class="fa-solid fa-trophy text-amber-400"></i> Top 10
+                    </button>
+                    <button onclick="navigateTo('manualCalc')" id="nav-manualCalc" class="nav-btn px-3.5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 text-slate-300 hover:text-white hover:bg-slate-800">
+                        <i class="fa-solid fa-calculator text-emerald-400"></i> Calculadora MPS
+                    </button>
+                    <button onclick="navigateTo('aiAssistant')" id="nav-aiAssistant" class="nav-btn px-3.5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 text-slate-300 hover:text-white hover:bg-slate-800">
+                        <i class="fa-solid fa-robot text-cyan-400"></i> Asistente IA
+                    </button>
+                    <button onclick="navigateTo('settings')" id="nav-settings" class="nav-btn px-3.5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 text-slate-300 hover:text-white hover:bg-slate-800">
+                        <i class="fa-solid fa-sliders"></i> Ajustes
+                    </button>
+                </nav>
+
+                <!-- Action Button & Mobile Toggle -->
+                <div class="flex items-center gap-3">
+                    <button onclick="openAddPrinterModal()" class="bg-gradient-to-r from-brand-600 to-cyan-600 hover:from-brand-500 hover:to-cyan-500 text-white px-3.5 py-2 rounded-lg text-sm font-semibold shadow-md shadow-brand-600/20 flex items-center gap-2 transition-all">
+                        <i class="fa-solid fa-plus"></i> <span class="hidden sm:inline">Nueva Impresora</span>
+                    </button>
+                    <button onclick="toggleMobileMenu()" class="lg:hidden text-slate-300 hover:text-white p-2 rounded-lg hover:bg-slate-800">
+                        <i class="fa-solid fa-bars text-xl"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mobile Navigation Menu -->
+        <div id="mobile-menu" class="hidden lg:hidden bg-slate-900 border-t border-slate-800 px-4 pt-2 pb-4 space-y-1">
+            <button onclick="navigateTo('dashboard'); toggleMobileMenu()" class="w-full text-left px-3 py-2 rounded-md text-slate-300 hover:bg-slate-800 hover:text-white font-medium flex items-center gap-3">
+                <i class="fa-solid fa-chart-pie w-5"></i> Dashboard
+            </button>
+            <button onclick="navigateTo('catalog'); toggleMobileMenu()" class="w-full text-left px-3 py-2 rounded-md text-slate-300 hover:bg-slate-800 hover:text-white font-medium flex items-center gap-3">
+                <i class="fa-solid fa-boxes-stacked w-5"></i> Catálogo de Equipos
+            </button>
+            <button onclick="navigateTo('consumables'); toggleMobileMenu()" class="w-full text-left px-3 py-2 rounded-md text-slate-300 hover:bg-slate-800 hover:text-white font-medium flex items-center gap-3">
+                <i class="fa-solid fa-box-archive text-amber-400 w-5"></i> Consumibles
+            </button>
+            <button onclick="navigateTo('top10'); toggleMobileMenu()" class="w-full text-left px-3 py-2 rounded-md text-slate-300 hover:bg-slate-800 hover:text-white font-medium flex items-center gap-3">
+                <i class="fa-solid fa-trophy text-amber-400 w-5"></i> Top 10 Menor Coste
+            </button>
+            <button onclick="navigateTo('manualCalc'); toggleMobileMenu()" class="w-full text-left px-3 py-2 rounded-md text-slate-300 hover:bg-slate-800 hover:text-white font-medium flex items-center gap-3">
+                <i class="fa-solid fa-calculator text-emerald-400 w-5"></i> Calculadora MPS
+            </button>
+            <button onclick="navigateTo('aiAssistant'); toggleMobileMenu()" class="w-full text-left px-3 py-2 rounded-md text-slate-300 hover:bg-slate-800 hover:text-white font-medium flex items-center gap-3">
+                <i class="fa-solid fa-robot text-cyan-400 w-5"></i> Asistente IA
+            </button>
+            <button onclick="navigateTo('settings'); toggleMobileMenu()" class="w-full text-left px-3 py-2 rounded-md text-slate-300 hover:bg-slate-800 hover:text-white font-medium flex items-center gap-3">
+                <i class="fa-solid fa-sliders w-5"></i> Ajustes
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT CONTAINER -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        <!-- GLOBAL TOP BACK BAR -->
+        <div id="back-bar" class="hidden mb-6 flex items-center justify-between bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+            <button onclick="goBack()" class="inline-flex items-center gap-2 text-slate-700 hover:text-brand-600 font-semibold text-sm transition-colors bg-slate-100 hover:bg-slate-200 px-3.5 py-1.5 rounded-lg">
+                <i class="fa-solid fa-arrow-left"></i> <span>← Volver</span>
+            </button>
+            <span id="back-bar-title" class="text-xs font-semibold uppercase tracking-wider text-slate-400">Vista Detallada</span>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- VIEW 1: DASHBOARD -->
+        <!-- ========================================== -->
+        <section id="view-dashboard" class="space-y-6">
+            <!-- Hero Welcome Header -->
+            <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-brand-900 rounded-2xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
+                <div class="absolute right-0 top-0 bottom-0 opacity-10 pointer-events-none p-6 flex items-center">
+                    <i class="fa-solid fa-print text-[180px]"></i>
+                </div>
+                <div class="relative z-10 max-w-2xl">
+                    <span class="bg-brand-500/30 text-brand-300 border border-brand-400/30 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest inline-block mb-3">
+                        Panel de Control MPS
+                    </span>
+                    <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2">Optimización de Costes e Inteligencia de Impresión</h1>
+                    <p class="text-slate-300 text-sm sm:text-base mb-6 leading-relaxed">
+                        Analiza los costes técnicos prorrateados por página de tu catálogo, calcula ofertas comerciales competitivas sin IVA y encuentra el equipo idóneo con nuestro asistente de IA.
+                    </p>
+                    <div class="flex flex-wrap gap-3">
+                        <button onclick="navigateTo('catalog')" class="bg-brand-600 hover:bg-brand-500 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-all shadow-lg flex items-center gap-2">
+                            <i class="fa-solid fa-boxes-stacked"></i> Explorar Catálogo
+                        </button>
+                        <button onclick="navigateTo('manualCalc')" class="bg-white/10 hover:bg-white/20 text-white font-semibold px-4 py-2.5 rounded-xl text-sm backdrop-blur transition-all flex items-center gap-2">
+                            <i class="fa-solid fa-calculator"></i> Nueva Simulación
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KPI Summary Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- Card 1: Equipos en Catálogo -->
+                <div onclick="navigateTo('catalog')" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-brand-400 hover:shadow-md transition-all cursor-pointer flex items-center justify-between group">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider group-hover:text-brand-600 transition-colors">Equipos en Catálogo</p>
+                        <h3 id="dash-total-printers" class="text-2xl font-black text-slate-800 mt-1">0</h3>
+                        <p class="text-xs text-brand-600 font-semibold mt-1 flex items-center gap-1">Ver todo el catálogo →</p>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 group-hover:bg-brand-600 group-hover:text-white transition-all flex items-center justify-center text-xl">
+                        <i class="fa-solid fa-print"></i>
+                    </div>
+                </div>
+
+                <!-- Card 2: Menor Coste B/N -->
+                <div onclick="navigateToLowestCost('bn')" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-emerald-400 hover:shadow-md transition-all cursor-pointer flex items-center justify-between group">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider group-hover:text-emerald-600 transition-colors">Menor Coste B/N (Sin IVA)</p>
+                        <h3 id="dash-min-bn" class="text-2xl font-black text-emerald-600 mt-1">0,00000 €</h3>
+                        <p id="dash-min-bn-model" class="text-xs text-slate-500 mt-1 truncate max-w-[150px]">-</p>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-all flex items-center justify-center text-xl">
+                        <i class="fa-solid fa-circle-check"></i>
+                    </div>
+                </div>
+
+                <!-- Card 3: Menor Coste Color -->
+                <div onclick="navigateToLowestCost('color')" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-purple-400 hover:shadow-md transition-all cursor-pointer flex items-center justify-between group">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider group-hover:text-purple-600 transition-colors">Menor Coste Color (Sin IVA)</p>
+                        <h3 id="dash-min-color" class="text-2xl font-black text-purple-600 mt-1">0,00000 €</h3>
+                        <p id="dash-min-color-model" class="text-xs text-slate-500 mt-1 truncate max-w-[150px]">-</p>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-all flex items-center justify-center text-xl">
+                        <i class="fa-solid fa-palette"></i>
+                    </div>
+                </div>
+
+                <!-- Card 4: Margen Recomendado -->
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Margen Recomendado</p>
+                        <h3 class="text-2xl font-black text-brand-600 mt-1">35% - 50%</h3>
+                        <p class="text-xs text-slate-500 mt-1">En contratos MPS</p>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center text-xl">
+                        <i class="fa-solid fa-chart-line"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dashboard Charts & Highlights -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Chart 1: Lowest Cost Comparison -->
+                <div class="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h2 class="font-bold text-slate-800 text-lg">Comparativa de Costes por Página (€ Sin IVA)</h2>
+                            <p class="text-xs text-slate-500">Top 5 equipos más eficientes en B/N y Color</p>
+                        </div>
+                        <button onclick="navigateTo('top10')" class="text-xs font-semibold text-brand-600 hover:text-brand-700 flex items-center gap-1">
+                            Ver Ranking Completo <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                        </button>
+                    </div>
+                    <div class="h-64 relative">
+                        <canvas id="chart-dashboard-comparison"></canvas>
+                    </div>
+                </div>
+
+                <!-- AI Quick Advisor Widget -->
+                <div class="bg-gradient-to-b from-slate-900 to-slate-800 text-white p-6 rounded-xl shadow-md flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center gap-2 mb-3 text-cyan-400">
+                            <i class="fa-solid fa-robot text-xl"></i>
+                            <span class="font-bold text-sm tracking-wide uppercase">Asistente IA de Impresión</span>
+                        </div>
+                        <h3 class="text-lg font-bold mb-2">¿Necesitas ayuda para elegir un equipo?</h3>
+                        <p class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Pregúntale a nuestro motor de IA integrado para obtener recomendaciones instantáneas o resolver cualquier duda técnica sobre el catálogo.
+                        </p>
+                        <div class="space-y-2">
+                            <button onclick="quickAskAI('¿Qué impresora B/N me recomiendas para 5.000 páginas al mes?')" class="w-full text-left bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-xs p-2.5 rounded-lg text-slate-200 transition-colors flex items-center justify-between">
+                                <span>"Recomendación para 5.000 pág/mes B/N"</span>
+                                <i class="fa-solid fa-arrow-right text-cyan-400 text-xs"></i>
+                            </button>
+                            <button onclick="quickAskAI('¿Cuál es el equipo A4 a color con menor coste por copia?')" class="w-full text-left bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-xs p-2.5 rounded-lg text-slate-200 transition-colors flex items-center justify-between">
+                                <span>"Equipo A4 Color de mínimo coste"</span>
+                                <i class="fa-solid fa-arrow-right text-cyan-400 text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button onclick="navigateTo('aiAssistant')" class="mt-6 w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold py-2.5 rounded-lg text-sm text-center transition-all">
+                        Abrir Chat Inteligente <i class="fa-solid fa-paper-plane ml-1"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Recent Catalog Grid Showcase -->
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="font-bold text-slate-800 text-lg">Catálogo Destacado</h2>
+                        <p class="text-xs text-slate-500">Últimas impresoras analizadas con prorrateo de consumibles (Sin IVA)</p>
+                    </div>
+                    <button onclick="navigateTo('catalog')" class="text-xs font-semibold text-brand-600 hover:text-brand-700">
+                        Ver Todos los Equipos →
+                    </button>
+                </div>
+                <div id="dashboard-catalog-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Dynamic printer cards -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- VIEW 2: CATÁLOGO DE IMPRESORAS (CON PAGINACIÓN) -->
+        <!-- ========================================== -->
+        <section id="view-catalog" class="hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <h1 class="text-2xl font-extrabold text-slate-800">Catálogo de Impresoras y Fichas Técnicas</h1>
+                        <p class="text-sm text-slate-500">Consulta los costes técnicos prorrateados sin IVA de cada equipo o añade nuevos modelos.</p>
+                    </div>
+                    <button onclick="openAddPrinterModal()" class="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-all shadow-sm flex items-center gap-2 self-start md:self-auto">
+                        <i class="fa-solid fa-plus"></i> Añadir Impresora
+                    </button>
+                </div>
+
+                <!-- Filters -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-2 border-t border-slate-100">
+                    <div class="relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-slate-400 text-sm"></i>
+                        <input type="text" id="filter-search" oninput="catalogCurrentPage=1; renderCatalog()" placeholder="Buscar por marca o modelo..." class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                    </div>
+                    <select id="filter-format" onchange="catalogCurrentPage=1; renderCatalog()" class="w-full py-2 px-3 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                        <option value="ALL">Todos los formatos (A4 / A3)</option>
+                        <option value="A4">Formato A4</option>
+                        <option value="A3">Formato A3</option>
+                    </select>
+                    <select id="filter-type" onchange="catalogCurrentPage=1; renderCatalog()" class="w-full py-2 px-3 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                        <option value="ALL">Todos los tipos (Color / Mono)</option>
+                        <option value="Monocromo">Monocromo (B/N)</option>
+                        <option value="Color">Color</option>
+                    </select>
+                    <select id="filter-sort" onchange="renderCatalog()" class="w-full py-2 px-3 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                        <option value="name">Ordenar: Nombre</option>
+                        <option value="bn_asc">Ordenar: Coste B/N (Menor a Mayor)</option>
+                        <option value="color_asc">Ordenar: Coste Color (Menor a Mayor)</option>
+                        <option value="volume_desc">Ordenar: Volumen Mensual Recomendado</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Catalog Printers Grid -->
+            <div id="catalog-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Dynamically rendered catalog cards -->
+            </div>
+
+            <!-- Pagination Bar (1, 2, 3, 4, 5...) -->
+            <div id="catalog-pagination" class="flex items-center justify-center gap-2 pt-4"></div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- VIEW 3: GESTIÓN DE CONSUMIBLES (NUEVO APARTADO) -->
+        <!-- ========================================== -->
+        <section id="view-consumables" class="hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <h1 class="text-2xl font-extrabold text-slate-800 flex items-center gap-2.5">
+                            <i class="fa-solid fa-box-archive text-amber-500"></i> Gestor de Consumibles y Recambios
+                        </h1>
+                        <p class="text-sm text-slate-500">Añade, modifica o elimina tóners, tambores, fusores y correas asociadas a tus equipos.</p>
+                    </div>
+                    <button onclick="openAddConsumableModal()" class="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-all shadow-sm flex items-center gap-2 self-start md:self-auto">
+                        <i class="fa-solid fa-plus"></i> Añadir Consumible
+                    </button>
+                </div>
+
+                <!-- Filters Bar -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
+                    <div class="relative sm:col-span-2">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-slate-400 text-sm"></i>
+                        <input type="text" id="filter-consumable-search" oninput="consumableCurrentPage=1; renderConsumables()" placeholder="Buscar por consumible o modelo de impresora..." class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                    </div>
+                    <select id="filter-consumable-type" onchange="consumableCurrentPage=1; renderConsumables()" class="w-full py-2 px-3 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                        <option value="ALL">Todos los tipos de consumible</option>
+                        <option value="Tóner">Tóners</option>
+                        <option value="Tambor">Tambores / Drums</option>
+                        <option value="Fusor">Kits Fusores</option>
+                        <option value="Correa">Correas de Transferencia</option>
+                        <option value="Bote">Botes de Residuo</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Consumables Table -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead>
+                            <tr class="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider border-b border-slate-200">
+                                <th class="py-3 px-4">Consumible / Componente</th>
+                                <th class="py-3 px-4">Tipo</th>
+                                <th class="py-3 px-4">Equipo Asociado</th>
+                                <th class="py-3 px-4 text-right">Precio Sin IVA (€)</th>
+                                <th class="py-3 px-4 text-right">Rendimiento (págs)</th>
+                                <th class="py-3 px-4 text-right">Coste / Pág (€)</th>
+                                <th class="py-3 px-4 text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="consumables-table-body" class="divide-y divide-slate-100">
+                            <!-- Dynamic rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Pagination Bar (1, 2, 3, 4, 5...) -->
+            <div id="consumables-pagination" class="flex items-center justify-center gap-2 pt-2"></div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- VIEW 4: FICHA TÉCNICA DETALLADA DE IMPRESORA -->
+        <!-- ========================================== -->
+        <section id="view-printerDetail" class="hidden space-y-6">
+            <!-- Printer Tech Sheet Header -->
+            <div id="detail-header-card" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative">
+                <!-- Dynamic tech sheet header -->
+            </div>
+
+            <!-- Key Cost Metrics Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div class="bg-slate-900 text-white p-5 rounded-xl shadow-sm border border-slate-800">
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Coste Técnico B/N (Sin IVA)</p>
+                    <div class="flex items-baseline gap-2 mt-1">
+                        <span id="detail-cost-bn" class="text-2xl font-extrabold text-emerald-400">0,00000 €</span>
+                        <span class="text-xs text-slate-400">/ pág</span>
+                    </div>
+                    <p class="text-[11px] text-slate-400 mt-1">Tóner K, Tambor K, Fusor, Correa y Bote Residual</p>
+                </div>
+
+                <div class="bg-slate-900 text-white p-5 rounded-xl shadow-sm border border-slate-800">
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Coste Técnico Color (Sin IVA)</p>
+                    <div class="flex items-baseline gap-2 mt-1">
+                        <span id="detail-cost-color" class="text-2xl font-extrabold text-purple-400">0,00000 €</span>
+                        <span class="text-xs text-slate-400">/ pág</span>
+                    </div>
+                    <p class="text-[11px] text-slate-400 mt-1">Suma de todos los consumibles B/N + Tóners C,M,Y + Tambores C,M,Y</p>
+                </div>
+
+                <div class="bg-brand-50 p-5 rounded-xl border border-brand-200">
+                    <p class="text-xs font-bold text-brand-800 uppercase tracking-wider">Simulación Volumen Medio</p>
+                    <div class="flex items-baseline gap-2 mt-1">
+                        <span id="detail-cost-monthly-est" class="text-2xl font-extrabold text-brand-700">0,00 €</span>
+                        <span class="text-xs text-brand-600">/ mes (Sin IVA)</span>
+                    </div>
+                    <p class="text-[11px] text-brand-600 mt-1" id="detail-cost-monthly-desc">Basado en volumen recomendado</p>
+                </div>
+            </div>
+
+            <!-- Consumables Breakdown Table -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-lg">Desglose Técnico de Consumibles y Piezas</h3>
+                        <p class="text-xs text-slate-500">Prorrateo individual por página al 5% de cobertura ISO (Precios sin IVA)</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="useInCalculatorCurrentPrinter()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-3 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1.5">
+                            <i class="fa-solid fa-calculator"></i> Cargar en Calculadora MPS
+                        </button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead>
+                            <tr class="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider border-b border-slate-200">
+                                <th class="py-3 px-4">Componente / Consumible</th>
+                                <th class="py-3 px-4">Tipo</th>
+                                <th class="py-3 px-4 text-right">Precio Sin IVA (€)</th>
+                                <th class="py-3 px-4 text-right">Rendimiento (págs)</th>
+                                <th class="py-3 px-4 text-right">Coste / Página (€)</th>
+                                <th class="py-3 px-4 text-right">% Impacto B/N</th>
+                                <th class="py-3 px-4 text-right">% Impacto Color</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detail-consumables-tbody" class="divide-y divide-slate-100">
+                            <!-- Dynamic rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- VIEW 5: TOP 10 IMPRESORAS MENOR COSTE POR COPIA -->
+        <!-- ========================================== -->
+        <section id="view-top10" class="hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl font-extrabold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-trophy text-amber-400"></i> Ranking Top 10 Menor Coste por Copia
+                    </h1>
+                    <p class="text-sm text-slate-500">Clasificación de las impresoras más rentables según sus costes técnicos (Precios sin IVA).</p>
+                </div>
+
+                <!-- Tabs selector -->
+                <div class="inline-flex p-1 bg-slate-100 rounded-xl">
+                    <button id="top10-tab-bn" onclick="switchTop10Tab('bn')" class="px-4 py-2 rounded-lg text-xs font-bold transition-all bg-white text-slate-800 shadow-sm">
+                        <i class="fa-solid fa-circle text-slate-800 mr-1.5"></i> Top Monocromo (B/N)
+                    </button>
+                    <button id="top10-tab-color" onclick="switchTop10Tab('color')" class="px-4 py-2 rounded-lg text-xs font-bold transition-all text-slate-600 hover:text-slate-900">
+                        <i class="fa-solid fa-palette text-purple-600 mr-1.5"></i> Top Color
+                    </button>
+                </div>
+            </div>
+
+            <!-- Podium Visual Cards (Top 3) -->
+            <div id="top10-podium-container" class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+                <!-- Top 1, 2, 3 dynamic cards -->
+            </div>
+
+            <!-- Ranked List (Positions 4 to 10) -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-4 bg-slate-50 border-b border-slate-200">
+                    <h3 class="font-bold text-slate-700 text-sm uppercase tracking-wider">Otras Posiciones del Ranking (4º al 10º)</h3>
+                </div>
+                <div id="top10-list-container" class="divide-y divide-slate-100">
+                    <!-- Dynamic ranked list rows -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- VIEW 6: CALCULADORA MANUAL DE COSTES Y MÁRGENES -->
+        <!-- ========================================== -->
+        <section id="view-manualCalc" class="hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl font-extrabold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-calculator text-emerald-500"></i> Calculadora Comercial y Análisis de Márgenes
+                    </h1>
+                    <p class="text-sm text-slate-500">Modifica parámetros al vuelo, calcula el PVP sin IVA, los márgenes y genera propuestas comerciales con desglose de IVA a parte.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="generateProposalPDF('client')" class="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-3.5 py-2 rounded-lg text-xs shadow-sm flex items-center gap-1.5">
+                        <i class="fa-solid fa-file-pdf"></i> PDF Propuesta Cliente
+                    </button>
+                    <button onclick="generateProposalPDF('internal')" class="bg-slate-800 hover:bg-slate-900 text-white font-semibold px-3.5 py-2 rounded-lg text-xs shadow-sm flex items-center gap-1.5">
+                        <i class="fa-solid fa-file-contract"></i> PDF Informe Interno
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- Left Input Panel (7 Cols) -->
+                <div class="lg:col-span-7 space-y-6">
+                    <!-- Selector of catalog printer -->
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider">Cargar Modelo desde el Catálogo</label>
+                        <select id="calc-printer-select" onchange="loadPrinterIntoCalculator(this.value)" class="w-full p-2.5 text-sm font-semibold border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                            <!-- Loaded dynamically -->
+                        </select>
+                    </div>
+
+                    <!-- Volume, Contract Duration & Pricing Parameters -->
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                        <h3 class="font-bold text-slate-800 border-b pb-2 text-sm uppercase tracking-wider text-brand-700 flex items-center gap-2">
+                            <i class="fa-solid fa-sliders"></i> 1. Volúmenes Mensuales y Duración de Contrato
+                        </h3>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Páginas Mensuales B/N</label>
+                                <input type="number" id="calc-vol-bn" value="3000" oninput="recalculateManual()" class="w-full p-2 text-sm border border-slate-300 rounded-lg focus:ring-brand-500 font-bold">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Páginas Mensuales Color</label>
+                                <input type="number" id="calc-vol-color" value="1500" oninput="recalculateManual()" class="w-full p-2 text-sm border border-slate-300 rounded-lg focus:ring-brand-500 font-bold">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Meses Contrato (Por Defecto 60)</label>
+                                <input type="number" id="calc-contract-months" value="60" oninput="recalculateManual()" class="w-full p-2 text-sm border border-slate-300 rounded-lg font-bold text-brand-700 bg-brand-50/50">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Coste Técnico B/N (€/pág Sin IVA)</label>
+                                <input type="number" step="0.00001" id="calc-cost-bn" value="0.00842" oninput="recalculateManual()" class="w-full p-2 text-sm border border-slate-300 rounded-lg font-mono text-emerald-700 font-bold">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Coste Técnico Color (€/pág Sin IVA)</label>
+                                <input type="number" step="0.00001" id="calc-cost-color" value="0.03500" oninput="recalculateManual()" class="w-full p-2 text-sm border border-slate-300 rounded-lg font-mono text-purple-700 font-bold">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Commercial Margins & PVP Settings -->
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                        <h3 class="font-bold text-slate-800 border-b pb-2 text-sm uppercase tracking-wider text-emerald-700 flex items-center gap-2">
+                            <i class="fa-solid fa-chart-pie"></i> 2. Módulo Comercial y Márgenes
+                        </h3>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Margen Comercial Deseado (%)</label>
+                                <div class="flex items-center gap-2">
+                                    <input type="range" id="calc-margin-range" min="10" max="80" value="40" oninput="document.getElementById('calc-margin-input').value = this.value; recalculateManualFromMargin()" class="w-full">
+                                    <input type="number" id="calc-margin-input" value="40" oninput="document.getElementById('calc-margin-range').value = this.value; recalculateManualFromMargin()" class="w-16 p-1 text-center border rounded text-xs font-bold"> %
+                                </div>
+                            </div>
+                            <div class="text-xs text-slate-500 pt-2">
+                                * Se calcula sobre el coste técnico para fijar el PVP de venta antes de impuestos.
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">PVP de Venta B/N (€/pág Sin IVA)</label>
+                                <input type="number" step="0.0001" id="calc-pvp-bn" value="0.0140" oninput="recalculateManualFromPVP()" class="w-full p-2 text-sm border border-slate-300 rounded-lg font-mono font-bold text-slate-900">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">PVP de Venta Color (€/pág Sin IVA)</label>
+                                <input type="number" step="0.0001" id="calc-pvp-color" value="0.0580" oninput="recalculateManualFromPVP()" class="w-full p-2 text-sm border border-slate-300 rounded-lg font-mono font-bold text-slate-900">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Customer Current Costs & Savings Comparison -->
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                        <h3 class="font-bold text-slate-800 border-b pb-2 text-sm uppercase tracking-wider text-cyan-700 flex items-center gap-2">
+                            <i class="fa-solid fa-piggy-bank"></i> 3. Comparador de Ahorro para el Cliente
+                        </h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Coste Actual B/N del Cliente (€/pág Sin IVA)</label>
+                                <input type="number" step="0.0001" id="calc-cust-bn" value="0.0220" oninput="recalculateManual()" class="w-full p-2 text-sm border border-slate-300 rounded-lg font-mono text-red-600">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Coste Actual Color del Cliente (€/pág Sin IVA)</label>
+                                <input type="number" step="0.0001" id="calc-cust-color" value="0.0950" oninput="recalculateManual()" class="w-full p-2 text-sm border border-slate-300 rounded-lg font-mono text-red-600">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Results & Financial KPIs Panel (5 Cols) -->
+                <div class="lg:col-span-5 space-y-6">
+                    <div class="bg-slate-900 text-white p-6 rounded-2xl shadow-xl space-y-6 sticky top-20 border border-slate-800">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+                            <span class="text-xs font-bold uppercase tracking-wider text-brand-400">Resultados Económicos MPS</span>
+                            <span id="res-contract-duration-badge" class="text-xs bg-brand-900 text-brand-200 px-2.5 py-0.5 rounded font-bold border border-brand-700">60 Meses</span>
+                        </div>
+
+                        <!-- KPI Total Monthly Invoice -->
+                        <div class="space-y-1">
+                            <p class="text-xs text-slate-400 uppercase font-medium">Facturación Mensual (Sin IVA)</p>
+                            <h2 id="res-total-invoice-subtotal" class="text-3xl font-black text-white">0,00 €</h2>
+                            <div class="pt-1 flex items-center justify-between text-xs text-slate-300 border-t border-slate-800/80">
+                                <span>+ IVA (21%): <strong id="res-total-invoice-vat" class="text-cyan-400">0,00 €</strong></span>
+                                <span class="font-bold text-white">Total Con IVA: <strong id="res-total-invoice-total" class="text-emerald-400">0,00 €</strong></span>
+                            </div>
+                            <p class="text-[11px] text-slate-400 mt-1" id="res-invoice-breakdown">Consumo de Páginas B/N + Color</p>
+                        </div>
+
+                        <!-- KPI Gross Margin -->
+                        <div class="bg-slate-800/80 p-4 rounded-xl border border-slate-700/60 space-y-2">
+                            <div class="flex justify-between items-center text-sm">
+                                <span class="text-slate-300">Coste Técnico Páginas:</span>
+                                <span id="res-tech-cost-sum" class="font-mono text-red-400 font-bold">0,00 €</span>
+                            </div>
+                            <div class="flex justify-between items-center text-sm">
+                                <span class="text-slate-300">Beneficio Bruto Mensual:</span>
+                                <span id="res-gross-profit-month" class="font-mono text-emerald-400 font-bold">0,00 €</span>
+                            </div>
+                            <div class="flex justify-between items-center text-sm pt-2 border-t border-slate-700">
+                                <span class="font-bold text-white">Margen Real Obtenido:</span>
+                                <span id="res-margin-percent" class="font-bold text-cyan-400 text-lg">0,0 %</span>
+                            </div>
+                        </div>
+
+                        <!-- Total Contract Profit & Annual Profit -->
+                        <div class="grid grid-cols-2 gap-3 text-center">
+                            <div class="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50">
+                                <p class="text-[10px] text-slate-400 uppercase font-semibold">Beneficio en Contrato</p>
+                                <p id="res-contract-profit" class="text-lg font-extrabold text-emerald-400 mt-0.5">0,00 €</p>
+                                <p class="text-[9px] text-slate-400">(60 meses sin IVA)</p>
+                            </div>
+                            <div class="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50">
+                                <p class="text-[10px] text-slate-400 uppercase font-semibold">Beneficio Anual</p>
+                                <p id="res-annual-profit" class="text-lg font-extrabold text-cyan-400 mt-0.5">0,00 €</p>
+                                <p class="text-[9px] text-slate-400">(12 meses sin IVA)</p>
+                            </div>
+                        </div>
+
+                        <!-- Savings Badge for Client -->
+                        <div class="bg-gradient-to-r from-emerald-950 to-emerald-900 border border-emerald-500/30 p-4 rounded-xl text-emerald-100 space-y-1">
+                            <p class="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                                <i class="fa-solid fa-circle-check"></i> Ahorro Generado al Cliente
+                            </p>
+                            <div class="flex items-baseline justify-between mt-1">
+                                <span id="res-client-monthly-savings" class="text-xl font-black text-white">0,00 € / mes</span>
+                                <span id="res-client-savings-percent" class="text-xs font-bold text-emerald-300">0% de ahorro</span>
+                            </div>
+                            <p class="text-[11px] text-emerald-200/80" id="res-client-contract-savings">Ahorro en contrato: 0,00 € (Sin IVA)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- VIEW 7: ASISTENTE VIRTUAL / IA DE IMPRESIÓN -->
+        <!-- ========================================== -->
+        <section id="view-aiAssistant" class="hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl font-extrabold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-robot text-cyan-500"></i> Asistente de Selección e Inteligencia MPS
+                    </h1>
+                    <p class="text-sm text-slate-500">Consultor inteligente para resolver dudas técnicas, recomendar impresoras del catálogo y asesorar sobre contratos.</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button onclick="resetAIChat()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 border border-slate-300 shadow-sm">
+                        <i class="fa-solid fa-rotate-left text-brand-600"></i> Restablecer Chat
+                    </button>
+                    <span id="ai-status-badge" class="bg-emerald-100 text-emerald-800 text-xs px-2.5 py-1 rounded-full font-bold flex items-center gap-1">
+                        <i class="fa-solid fa-circle text-[8px] text-emerald-500"></i> Preparado
+                    </span>
+                </div>
+            </div>
+
+            <!-- Chat Interface Box -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-md flex flex-col h-[600px] overflow-hidden">
+                <!-- Chat Messages Scroll Container -->
+                <div id="ai-chat-container" class="flex-1 p-6 overflow-y-auto space-y-4 custom-scrollbar bg-slate-50">
+                    <!-- Default Welcome AI Message -->
+                    <div class="flex items-start gap-3 max-w-3xl">
+                        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-cyan-500 flex items-center justify-center text-white shrink-0 shadow-sm">
+                            <i class="fa-solid fa-robot text-base"></i>
+                        </div>
+                        <div class="bg-white border border-slate-200 p-4 rounded-2xl rounded-tl-none shadow-sm text-sm space-y-2 text-slate-800">
+                            <p class="font-bold text-slate-900">¡Hola! Soy tu Asistente Especialista en Impresión MPS.</p>
+                            <p class="leading-relaxed">
+                                Conozco al detalle todo tu catálogo actual de impresoras, sus consumibles y costes técnicos sin IVA. Hazme cualquier pregunta técnica, sobre marcas (Lexmark, OKI, Kyocera, HP, etc.), recomendación por volumen o asesoramiento comercial.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Prompt Chips Quick Buttons -->
+                <div class="p-3 bg-slate-100 border-t border-slate-200 overflow-x-auto flex items-center gap-2 text-xs">
+                    <span class="font-bold text-slate-500 whitespace-nowrap pl-1"><i class="fa-solid fa-bolt text-amber-500 mr-1"></i> Sugerencias:</span>
+                    <button onclick="quickAskAI('¿Qué impresora B/N me recomiendas para imprimir 5.000 páginas al mes?')" class="bg-white hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-full border border-slate-300 font-medium whitespace-nowrap transition-colors">
+                        5.000 pág/mes B/N
+                    </button>
+                    <button onclick="quickAskAI('¿Cuál es la impresora con el coste a color más bajo del catálogo?')" class="bg-white hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-full border border-slate-300 font-medium whitespace-nowrap transition-colors">
+                        Menor coste Color
+                    </button>
+                    <button onclick="quickAskAI('Necesito un equipo A4 a color para 2.000 páginas/mes con el mejor margen comercial.')" class="bg-white hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-full border border-slate-300 font-medium whitespace-nowrap transition-colors">
+                        A4 Color 2.000 pág/mes
+                    </button>
+                    <button onclick="quickAskAI('¿Cómo estructurar un contrato de coste por copia rentable para pymes a 60 meses?')" class="bg-white hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-full border border-slate-300 font-medium whitespace-nowrap transition-colors">
+                        Consejos Contrato 60 meses
+                    </button>
+                </div>
+
+                <!-- Chat Input Field -->
+                <div class="p-4 bg-white border-t border-slate-200 flex items-center gap-3">
+                    <input type="text" id="ai-user-input" onkeydown="if(event.key==='Enter') sendAIMessage()" placeholder="Hazme cualquier pregunta sobre equipos, costes o asesoramiento..." class="flex-1 p-3 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                    <button onclick="sendAIMessage()" class="bg-brand-600 hover:bg-brand-700 text-white font-bold px-5 py-3 rounded-xl text-sm transition-all shadow-md flex items-center gap-2">
+                        <span>Enviar</span> <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- VIEW 8: CONFIGURACIÓN Y LOCALSTORAGE -->
+        <!-- ========================================== -->
+        <section id="view-settings" class="hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <h1 class="text-2xl font-extrabold text-slate-800">Ajustes y Datos del Sistema</h1>
+                <p class="text-sm text-slate-500">Gestiona la persistencia de datos local del catálogo de impresoras.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- LocalStorage Data Reset & Export -->
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                    <h3 class="font-bold text-slate-800 text-lg flex items-center gap-2">
+                        <i class="fa-solid fa-database text-cyan-600"></i> Gestión del Catálogo en LocalStorage
+                    </h3>
+                    <p class="text-xs text-slate-600 leading-relaxed">
+                        Tus modificaciones en las impresoras y consumibles se guardan automáticamente en tu navegador. Puedes restaurar el catálogo predeterminado de equipos en cualquier momento.
+                    </p>
+                    <div class="flex flex-wrap gap-3 pt-2">
+                        <button onclick="resetCatalogToDefaults()" class="bg-amber-600 hover:bg-amber-700 text-white font-bold px-4 py-2 rounded-lg text-xs transition-all flex items-center gap-2">
+                            <i class="fa-solid fa-rotate-left"></i> Restaurar Catálogo Predeterminado
+                        </button>
+                        <button onclick="exportCatalogJSON()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold px-4 py-2 rounded-lg text-xs transition-all flex items-center gap-2">
+                            <i class="fa-solid fa-download"></i> Exportar JSON
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Informative card -->
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                    <h3 class="font-bold text-slate-800 text-lg flex items-center gap-2">
+                        <i class="fa-solid fa-shield-halved text-brand-600"></i> Parámetros Financieros
+                    </h3>
+                    <div class="text-xs text-slate-600 space-y-2">
+                        <p><strong>Tipo de IVA predeterminado:</strong> 21%</p>
+                        <p><strong>Duración por defecto de contrato:</strong> 60 Meses</p>
+                        <p><strong>Fórmula de coste B/N:</strong> Tóner K + Tambor K + Fusor + Correa + Bote Residual</p>
+                        <p><strong>Fórmula de coste Color:</strong> B/N + Tóners (C, M, Y) + Tambores (C, M, Y)</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ========================================== -->
+    <!-- MODAL 1: AÑADIR / EDITAR IMPRESORA -->
+    <!-- ========================================== -->
+    <div id="printer-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl flex flex-col my-auto border border-slate-200">
+            <!-- Modal Header -->
+            <div class="p-5 bg-slate-900 text-white flex items-center justify-between">
+                <div>
+                    <h2 id="modal-title" class="text-xl font-extrabold">Añadir Nueva Impresora</h2>
+                    <p class="text-xs text-slate-400">Introduce las especificaciones técnicas y precios sin IVA de los consumibles al 5% de cobertura</p>
+                </div>
+                <button onclick="closePrinterModal()" class="text-slate-400 hover:text-white p-2 rounded-lg">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <!-- Modal Form Scroll Container -->
+            <form id="printer-form" onsubmit="savePrinterFromModal(event)" class="p-6 overflow-y-auto space-y-6 custom-scrollbar text-sm">
+                <input type="hidden" id="modal-printer-id">
+
+                <!-- Basic Specs -->
+                <div class="space-y-4">
+                    <h3 class="font-bold text-slate-800 border-b pb-2 text-xs uppercase tracking-wider text-brand-600">1. Especificaciones Básicas del Equipo</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Marca *</label>
+                            <input type="text" id="modal-brand" required placeholder="Ej. Lexmark, Kyocera..." class="w-full p-2 border border-slate-300 rounded-lg">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Modelo *</label>
+                            <input type="text" id="modal-model" required placeholder="Ej. XC9525" class="w-full p-2 border border-slate-300 rounded-lg">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Formato *</label>
+                            <select id="modal-format" class="w-full p-2 border border-slate-300 rounded-lg">
+                                <option value="A4">A4</option>
+                                <option value="A3">A3</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Tipo de Impresión *</label>
+                            <select id="modal-type" class="w-full p-2 border border-slate-300 rounded-lg">
+                                <option value="Color">Color</option>
+                                <option value="Monocromo">Monocromo (B/N)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Volumen Rec. Mensual (págs)</label>
+                            <input type="number" id="modal-recVolume" value="5000" class="w-full p-2 border border-slate-300 rounded-lg">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Consumables Prices & Yields -->
+                <div class="space-y-4">
+                    <h3 class="font-bold text-slate-800 border-b pb-2 text-xs uppercase tracking-wider text-brand-600">2. Consumibles y Recambios B/N (Precios Sin IVA)</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <!-- Tóner K -->
+                        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
+                            <span class="font-bold text-xs text-slate-800 block">Tóner Negro (K)</span>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="text-[11px] text-slate-500">Precio (€ Sin IVA)</label>
+                                    <input type="number" step="0.01" id="modal-price-tonerK" value="0" class="w-full p-1.5 text-xs border rounded">
+                                </div>
+                                <div>
+                                    <label class="text-[11px] text-slate-500">Rendimiento (págs)</label>
+                                    <input type="number" id="modal-yield-tonerK" value="10000" class="w-full p-1.5 text-xs border rounded">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tambor K -->
+                        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
+                            <span class="font-bold text-xs text-slate-800 block">Tambor / Drum Negro (K)</span>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="text-[11px] text-slate-500">Precio (€ Sin IVA)</label>
+                                    <input type="number" step="0.01" id="modal-price-drumK" value="0" class="w-full p-1.5 text-xs border rounded">
+                                </div>
+                                <div>
+                                    <label class="text-[11px] text-slate-500">Rendimiento (págs)</label>
+                                    <input type="number" id="modal-yield-drumK" value="60000" class="w-full p-1.5 text-xs border rounded">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Fusor -->
+                        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
+                            <span class="font-bold text-xs text-slate-800 block">Kit Fusor</span>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="text-[11px] text-slate-500">Precio (€ Sin IVA)</label>
+                                    <input type="number" step="0.01" id="modal-price-fuser" value="0" class="w-full p-1.5 text-xs border rounded">
+                                </div>
+                                <div>
+                                    <label class="text-[11px] text-slate-500">Rendimiento (págs)</label>
+                                    <input type="number" id="modal-yield-fuser" value="150000" class="w-full p-1.5 text-xs border rounded">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Correa Transferencia -->
+                        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
+                            <span class="font-bold text-xs text-slate-800 block">Correa de Transferencia</span>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="text-[11px] text-slate-500">Precio (€ Sin IVA)</label>
+                                    <input type="number" step="0.01" id="modal-price-transfer" value="0" class="w-full p-1.5 text-xs border rounded">
+                                </div>
+                                <div>
+                                    <label class="text-[11px] text-slate-500">Rendimiento (págs)</label>
+                                    <input type="number" id="modal-yield-transfer" value="150000" class="w-full p-1.5 text-xs border rounded">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bote Residual -->
+                        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2 sm:col-span-2">
+                            <span class="font-bold text-xs text-slate-800 block">Bote de Tóner Residual</span>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="text-[11px] text-slate-500">Precio (€ Sin IVA)</label>
+                                    <input type="number" step="0.01" id="modal-price-wasteBox" value="0" class="w-full p-1.5 text-xs border rounded">
+                                </div>
+                                <div>
+                                    <label class="text-[11px] text-slate-500">Rendimiento (págs)</label>
+                                    <input type="number" id="modal-yield-wasteBox" value="50000" class="w-full p-1.5 text-xs border rounded">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Color Consumables (Cyan, Magenta, Yellow) -->
+                <div id="modal-color-consumables-section" class="space-y-4">
+                    <h3 class="font-bold text-slate-800 border-b pb-2 text-xs uppercase tracking-wider text-purple-600">3. Consumibles Color (Cyan, Magenta, Amarillo)</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <!-- Cyan -->
+                        <div class="bg-cyan-50/50 p-3 rounded-lg border border-cyan-200 space-y-2">
+                            <span class="font-bold text-xs text-cyan-900 block">Cian (C)</span>
+                            <div>
+                                <label class="text-[10px] text-slate-500">Precio Tóner (€)</label>
+                                <input type="number" step="0.01" id="modal-price-tonerC" value="0" class="w-full p-1.5 text-xs border rounded">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-slate-500">Rend. Tóner (págs)</label>
+                                <input type="number" id="modal-yield-tonerC" value="10000" class="w-full p-1.5 text-xs border rounded">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-slate-500">Precio Tambor (€)</label>
+                                <input type="number" step="0.01" id="modal-price-drumC" value="0" class="w-full p-1.5 text-xs border rounded">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-slate-500">Rend. Tambor (págs)</label>
+                                <input type="number" id="modal-yield-drumC" value="60000" class="w-full p-1.5 text-xs border rounded">
+                            </div>
+                        </div>
+
+                        <!-- Magenta -->
+                        <div class="bg-pink-50/50 p-3 rounded-lg border border-pink-200 space-y-2">
+                            <span class="font-bold text-xs text-pink-900 block">Magenta (M)</span>
+                            <div>
+                                <label class="text-[10px] text-slate-500">Precio Tóner (€)</label>
+                                <input type="number" step="0.01" id="modal-price-tonerM" value="0" class="w-full p-1.5 text-xs border rounded">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-slate-500">Rend. Tóner (págs)</label>
+                                <input type="number" id="modal-yield-tonerM" value="10000" class="w-full p-1.5 text-xs border rounded">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-slate-500">Precio Tambor (€)</label>
+                                <input type="number" step="0.01" id="modal-price-drumM" value="0" class="w-full p-1.5 text-xs border rounded">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-slate-500">Rend. Tambor (págs)</label>
+                                <input type="number" id="modal-yield-drumM" value="60000" class="w-full p-1.5 text-xs border rounded">
+                            </div>
+                        </div>
+
+                        <!-- Yellow -->
+                        <div class="bg-amber-50/50 p-3 rounded-lg border border-amber-200 space-y-2">
+                            <span class="font-bold text-xs text-amber-900 block">Amarillo (Y)</span>
+                            <div>
+                                <label class="text-[10px] text-slate-500">Precio Tóner (€)</label>
+                                <input type="number" step="0.01" id="modal-price-tonerY" value="0" class="w-full p-1.5 text-xs border rounded">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-slate-500">Rend. Tóner (págs)</label>
+                                <input type="number" id="modal-yield-tonerY" value="10000" class="w-full p-1.5 text-xs border rounded">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-slate-500">Precio Tambor (€)</label>
+                                <input type="number" step="0.01" id="modal-price-drumY" value="0" class="w-full p-1.5 text-xs border rounded">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-slate-500">Rend. Tambor (págs)</label>
+                                <input type="number" id="modal-yield-drumY" value="60000" class="w-full p-1.5 text-xs border rounded">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer Submit -->
+                <div class="pt-4 border-t border-slate-200 flex justify-end gap-3">
+                    <button type="button" onclick="closePrinterModal()" class="px-4 py-2 border border-slate-300 rounded-xl text-slate-600 hover:bg-slate-100 font-medium">Cancelar</button>
+                    <button type="submit" class="px-6 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl shadow-md">Guardar Impresora</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL 2: AÑADIR / EDITAR CONSUMIBLE (NUEVO) -->
+    <!-- ========================================== -->
+    <div id="consumable-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col my-auto border border-slate-200">
+            <div class="p-5 bg-slate-900 text-white flex items-center justify-between">
+                <div>
+                    <h2 id="consumable-modal-title" class="text-xl font-extrabold">Añadir / Editar Consumible</h2>
+                    <p class="text-xs text-slate-400">Introduce el precio sin IVA y la duración estimada al 5% ISO</p>
+                </div>
+                <button onclick="closeConsumableModal()" class="text-slate-400 hover:text-white p-2 rounded-lg">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <form id="consumable-form" onsubmit="saveConsumableFromModal(event)" class="p-6 space-y-4 text-sm">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Seleccionar Equipo / Impresora *</label>
+                    <select id="cons-modal-printer" required class="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none font-medium">
+                        <!-- Loaded dynamically -->
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Tipo de Consumible / Componente *</label>
+                    <select id="cons-modal-key" required class="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none font-medium">
+                        <option value="tonerK">Tóner Negro (K)</option>
+                        <option value="drumK">Tambor / Drum Negro (K)</option>
+                        <option value="tonerC">Tóner Cian (C)</option>
+                        <option value="drumC">Tambor / Drum Cian (C)</option>
+                        <option value="tonerM">Tóner Magenta (M)</option>
+                        <option value="drumM">Tambor / Drum Magenta (M)</option>
+                        <option value="tonerY">Tóner Amarillo (Y)</option>
+                        <option value="drumY">Tambor / Drum Amarillo (Y)</option>
+                        <option value="fuser">Kit Fusor</option>
+                        <option value="transfer">Correa de Transferencia</option>
+                        <option value="wasteBox">Bote de Tóner Residual</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 pt-1">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Precio (€ Sin IVA) *</label>
+                        <input type="number" step="0.01" id="cons-modal-price" required value="0" class="w-full p-2 text-sm border border-slate-300 rounded-lg font-bold">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Rendimiento (Páginas) *</label>
+                        <input type="number" id="cons-modal-yield" required value="10000" class="w-full p-2 text-sm border border-slate-300 rounded-lg font-bold">
+                    </div>
+                </div>
+
+                <div class="pt-4 border-t border-slate-200 flex justify-end gap-3">
+                    <button type="button" onclick="closeConsumableModal()" class="px-4 py-2 border border-slate-300 rounded-xl text-slate-600 hover:bg-slate-100 font-medium">Cancelar</button>
+                    <button type="submit" class="px-6 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl shadow-md">Guardar Consumible</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 ease-out bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl border border-slate-700 flex items-center gap-3 text-sm">
+        <i id="toast-icon" class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>
+        <span id="toast-msg" class="font-medium">Operación realizada con éxito</span>
+    </div>
+
+    <!-- JAVASCRIPT APPLICATION LOGIC -->
+    <script>
+        /* ========================================== */
+        /* DEFAULT PRINTERS CATALOG DATA STORE        */
+        /* ========================================== */
+        const DEFAULT_PRINTERS = [
+            {
+                id: "lexmark-xc9525",
+                brand: "Lexmark",
+                model: "XC9525",
+                format: "A3",
+                type: "Color",
+                recVolume: 10000,
+                consumables: {
+                    tonerK: { price: 42.50, yield: 25000 },
+                    drumK: { price: 65.00, yield: 80000 },
+                    tonerC: { price: 82.00, yield: 16000 },
+                    tonerM: { price: 82.00, yield: 16000 },
+                    tonerY: { price: 82.00, yield: 16000 },
+                    drumC: { price: 75.00, yield: 80000 },
+                    drumM: { price: 75.00, yield: 80000 },
+                    drumY: { price: 75.00, yield: 80000 },
+                    fuser: { price: 180.00, yield: 150000 },
+                    transfer: { price: 120.00, yield: 150000 },
+                    wasteBox: { price: 22.00, yield: 90000 }
+                }
+            },
+            {
+                id: "lexmark-xc4342",
+                brand: "Lexmark",
+                model: "XC4342",
+                format: "A4",
+                type: "Color",
+                recVolume: 6000,
+                consumables: {
+                    tonerK: { price: 38.00, yield: 20000 },
+                    drumK: { price: 48.00, yield: 60000 },
+                    tonerC: { price: 68.00, yield: 12500 },
+                    tonerM: { price: 68.00, yield: 12500 },
+                    tonerY: { price: 68.00, yield: 12500 },
+                    drumC: { price: 52.00, yield: 60000 },
+                    drumM: { price: 52.00, yield: 60000 },
+                    drumY: { price: 52.00, yield: 60000 },
+                    fuser: { price: 135.00, yield: 120000 },
+                    transfer: { price: 95.00, yield: 120000 },
+                    wasteBox: { price: 18.00, yield: 60000 }
+                }
+            },
+            {
+                id: "lexmark-xm3350",
+                brand: "Lexmark",
+                model: "XM3350",
+                format: "A4",
+                type: "Monocromo",
+                recVolume: 5000,
+                consumables: {
+                    tonerK: { price: 46.00, yield: 31000 },
+                    drumK: { price: 39.00, yield: 75000 },
+                    fuser: { price: 110.00, yield: 150000 },
+                    transfer: { price: 0, yield: 0 },
+                    wasteBox: { price: 0, yield: 0 }
+                }
+            },
+            {
+                id: "lexmark-m1342",
+                brand: "Lexmark",
+                model: "M1342",
+                format: "A4",
+                type: "Monocromo",
+                recVolume: 3000,
+                consumables: {
+                    tonerK: { price: 54.00, yield: 20000 },
+                    drumK: { price: 32.00, yield: 40000 },
+                    fuser: { price: 95.00, yield: 120000 },
+                    transfer: { price: 0, yield: 0 },
+                    wasteBox: { price: 0, yield: 0 }
+                }
+            },
+            {
+                id: "oki-es5112",
+                brand: "OKI",
+                model: "ES5112",
+                format: "A4",
+                type: "Monocromo",
+                recVolume: 4000,
+                consumables: {
+                    tonerK: { price: 41.00, yield: 12000 },
+                    drumK: { price: 35.00, yield: 30000 },
+                    fuser: { price: 85.00, yield: 100000 },
+                    transfer: { price: 0, yield: 0 },
+                    wasteBox: { price: 0, yield: 0 }
+                }
+            },
+            {
+                id: "oki-es7170",
+                brand: "OKI",
+                model: "ES7170 MFP",
+                format: "A4",
+                type: "Monocromo",
+                recVolume: 8000,
+                consumables: {
+                    tonerK: { price: 49.00, yield: 36000 },
+                    drumK: { price: 55.00, yield: 72000 },
+                    fuser: { price: 125.00, yield: 200000 },
+                    transfer: { price: 0, yield: 0 },
+                    wasteBox: { price: 0, yield: 0 }
+                }
+            },
+            {
+                id: "kyocera-ma3500ci",
+                brand: "Kyocera",
+                model: "TASKalfa MA3500ci",
+                format: "A4",
+                type: "Color",
+                recVolume: 4500,
+                consumables: {
+                    tonerK: { price: 39.00, yield: 13000 },
+                    drumK: { price: 70.00, yield: 200000 },
+                    tonerC: { price: 62.00, yield: 10000 },
+                    tonerM: { price: 62.00, yield: 10000 },
+                    tonerY: { price: 62.00, yield: 10000 },
+                    drumC: { price: 70.00, yield: 200000 },
+                    drumM: { price: 70.00, yield: 200000 },
+                    drumY: { price: 70.00, yield: 200000 },
+                    fuser: { price: 140.00, yield: 200000 },
+                    transfer: { price: 110.00, yield: 200000 },
+                    wasteBox: { price: 14.00, yield: 40000 }
+                }
+            },
+            {
+                id: "hp-lj-m234sdn",
+                brand: "HP",
+                model: "LaserJet MFP M234sdn",
+                format: "A4",
+                type: "Monocromo",
+                recVolume: 1500,
+                consumables: {
+                    tonerK: { price: 34.00, yield: 2400 },
+                    drumK: { price: 0, yield: 0 },
+                    fuser: { price: 75.00, yield: 50000 },
+                    transfer: { price: 0, yield: 0 },
+                    wasteBox: { price: 0, yield: 0 }
+                }
+            }
+        ];
+
+        /* ========================================== */
+        /* STATE MANAGEMENT & UTILS                  */
+        /* ========================================== */
+        let printers = [];
+        let navHistory = ['dashboard'];
+        let currentPrinterDetail = null;
+        let comparisonChart = null;
+        let top10TabActive = 'bn';
+
+        // Pagination states
+        let catalogCurrentPage = 1;
+        const catalogItemsPerPage = 6;
+
+        let consumableCurrentPage = 1;
+        const consumableItemsPerPage = 8;
+
+        function loadPrintersFromStorage() {
+            const saved = localStorage.getItem('printcost_pro_printers');
+            if (saved) {
+                try {
+                    printers = JSON.parse(saved);
+                } catch (e) {
+                    printers = [...DEFAULT_PRINTERS];
+                }
+            } else {
+                printers = [...DEFAULT_PRINTERS];
+            }
+        }
+
+        function savePrintersToStorage() {
+            localStorage.setItem('printcost_pro_printers', JSON.stringify(printers));
+        }
+
+        function resetCatalogToDefaults() {
+            if (confirm("¿Estás seguro de restablecer el catálogo predeterminado? Se perderán tus cambios.")) {
+                printers = JSON.parse(JSON.stringify(DEFAULT_PRINTERS));
+                savePrintersToStorage();
+                renderAll();
+                showToast("Catálogo restaurado correctamente", "success");
+            }
+        }
+
+        function exportCatalogJSON() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(printers, null, 2));
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", `printcost_catalog_${new Date().toISOString().slice(0,10)}.json`);
+            dlAnchorElem.click();
+        }
+
+        // Calculation helper: Technical cost per page (B/N and Color)
+        function calculateTechnicalCosts(printer) {
+            const c = printer.consumables || {};
+
+            const costTonerK = (c.tonerK && c.tonerK.yield > 0) ? (c.tonerK.price / c.tonerK.yield) : 0;
+            const costDrumK  = (c.drumK  && c.drumK.yield > 0)  ? (c.drumK.price / c.drumK.yield) : 0;
+            const costFuser  = (c.fuser  && c.fuser.yield > 0)  ? (c.fuser.price / c.fuser.yield) : 0;
+            const costTransfer = (c.transfer && c.transfer.yield > 0) ? (c.transfer.price / c.transfer.yield) : 0;
+            const costWaste  = (c.wasteBox && c.wasteBox.yield > 0) ? (c.wasteBox.price / c.wasteBox.yield) : 0;
+
+            const bnCost = costTonerK + costDrumK + costFuser + costTransfer + costWaste;
+
+            let colorCost = bnCost;
+            if (printer.type === 'Color') {
+                const costTonerC = (c.tonerC && c.tonerC.yield > 0) ? (c.tonerC.price / c.tonerC.yield) : 0;
+                const costTonerM = (c.tonerM && c.tonerM.yield > 0) ? (c.tonerM.price / c.tonerM.yield) : 0;
+                const costTonerY = (c.tonerY && c.tonerY.yield > 0) ? (c.tonerY.price / c.tonerY.yield) : 0;
+
+                const costDrumC  = (c.drumC  && c.drumC.yield > 0)  ? (c.drumC.price / c.drumC.yield) : 0;
+                const costDrumM  = (c.drumM  && c.drumM.yield > 0)  ? (c.drumM.price / c.drumM.yield) : 0;
+                const costDrumY  = (c.drumY  && c.drumY.yield > 0)  ? (c.drumY.price / c.drumY.yield) : 0;
+
+                colorCost += (costTonerC + costTonerM + costTonerY + costDrumC + costDrumM + costDrumY);
+            }
+
+            return { bnCost, colorCost };
+        }
+
+        /* ========================================== */
+        /* NAVIGATION & ROUTING                       */
+        /* ========================================== */
+        function navigateTo(viewId, printerIdParam = null, recordHistory = true) {
+            const views = ['dashboard', 'catalog', 'consumables', 'printerDetail', 'top10', 'manualCalc', 'aiAssistant', 'settings'];
+            views.forEach(v => {
+                const el = document.getElementById(`view-${v}`);
+                if (el) el.classList.add('hidden');
+
+                const navBtn = document.getElementById(`nav-${v}`);
+                if (navBtn) {
+                    navBtn.classList.remove('bg-slate-800', 'text-white', 'font-bold');
+                    navBtn.classList.add('text-slate-300');
+                }
+            });
+
+            const activeView = document.getElementById(`view-${viewId}`);
+            if (activeView) activeView.classList.remove('hidden');
+
+            const activeNavBtn = document.getElementById(`nav-${viewId}`);
+            if (activeNavBtn) {
+                activeNavBtn.classList.add('bg-slate-800', 'text-white', 'font-bold');
+                activeNavBtn.classList.remove('text-slate-300');
+            }
+
+            if (recordHistory) {
+                if (navHistory[navHistory.length - 1] !== viewId) {
+                    navHistory.push(viewId);
+                }
+            }
+
+            const backBar = document.getElementById('back-bar');
+            if (navHistory.length > 1) {
+                backBar.classList.remove('hidden');
+            } else {
+                backBar.classList.add('hidden');
+            }
+
+            // View-specific initialization
+            if (viewId === 'dashboard') {
+                renderDashboard();
+            } else if (viewId === 'catalog') {
+                renderCatalog();
+            } else if (viewId === 'consumables') {
+                renderConsumables();
+            } else if (viewId === 'printerDetail' && printerIdParam) {
+                renderPrinterDetail(printerIdParam);
+            } else if (viewId === 'top10') {
+                renderTop10();
+            } else if (viewId === 'manualCalc') {
+                initManualCalculator(printerIdParam);
+            }
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function goBack() {
+            if (navHistory.length > 1) {
+                navHistory.pop();
+                const lastView = navHistory[navHistory.length - 1];
+                navigateTo(lastView, null, false);
+            }
+        }
+
+        function toggleMobileMenu() {
+            const menu = document.getElementById('mobile-menu');
+            menu.classList.toggle('hidden');
+        }
+
+        function showToast(msg, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toast-msg');
+            const toastIcon = document.getElementById('toast-icon');
+
+            toastMsg.innerText = msg;
+            if (type === 'success') {
+                toastIcon.className = 'fa-solid fa-circle-check text-emerald-400 text-lg';
+            } else {
+                toastIcon.className = 'fa-solid fa-triangle-exclamation text-amber-400 text-lg';
+            }
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        /* ========================================== */
+        /* PAGINATION COMPONENT GENERATOR             */
+        /* ========================================== */
+        function renderPagination(containerId, currentPage, totalPages, onPageChangeFnName) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            if (totalPages <= 1) {
+                container.innerHTML = '';
+                return;
+            }
+
+            let html = `<div class="flex items-center gap-1.5 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">`;
+
+            // Previous Button
+            html += `<button onclick="${onPageChangeFnName}(${currentPage - 1})" ${currentPage === 1 ? 'disabled class="px-3 py-1 rounded-lg text-xs font-semibold text-slate-300 cursor-not-allowed"' : 'class="px-3 py-1 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"'}>
+                <i class="fa-solid fa-chevron-left"></i> Anterior
+            </button>`;
+
+            // Page Number Buttons 1, 2, 3, 4, 5...
+            for (let i = 1; i <= totalPages; i++) {
+                if (i === currentPage) {
+                    html += `<button class="w-8 h-8 rounded-lg text-xs font-bold bg-brand-600 text-white shadow-sm transition-all">${i}</button>`;
+                } else {
+                    html += `<button onclick="${onPageChangeFnName}(${i})" class="w-8 h-8 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-all">${i}</button>`;
+                }
+            }
+
+            // Next Button
+            html += `<button onclick="${onPageChangeFnName}(${currentPage + 1})" ${currentPage === totalPages ? 'disabled class="px-3 py-1 rounded-lg text-xs font-semibold text-slate-300 cursor-not-allowed"' : 'class="px-3 py-1 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"'}>
+                Siguiente <i class="fa-solid fa-chevron-right"></i>
+            </button>`;
+
+            html += `</div>`;
+            container.innerHTML = html;
+        }
+
+        /* ========================================== */
+        /* RENDER VIEW 1: DASHBOARD                   */
+        /* ========================================== */
+        function renderDashboard() {
+            document.getElementById('dash-total-printers').innerText = printers.length;
+
+            let minBN = Infinity;
+            let minBNModel = '-';
+            let minColor = Infinity;
+            let minColorModel = '-';
+
+            printers.forEach(p => {
+                const costs = calculateTechnicalCosts(p);
+                if (costs.bnCost < minBN) {
+                    minBN = costs.bnCost;
+                    minBNModel = `${p.brand} ${p.model}`;
+                }
+                if (p.type === 'Color' && costs.colorCost < minColor) {
+                    minColor = costs.colorCost;
+                    minColorModel = `${p.brand} ${p.model}`;
+                }
+            });
+
+            document.getElementById('dash-min-bn').innerText = minBN !== Infinity ? `${minBN.toFixed(5)} €` : 'N/A';
+            document.getElementById('dash-min-bn-model').innerText = minBNModel;
+            document.getElementById('dash-min-color').innerText = minColor !== Infinity ? `${minColor.toFixed(5)} €` : 'N/A';
+            document.getElementById('dash-min-color-model').innerText = minColorModel;
+
+            // Render Featured Catalog Grid
+            const grid = document.getElementById('dashboard-catalog-grid');
+            grid.innerHTML = '';
+            printers.slice(0, 3).forEach(p => {
+                const costs = calculateTechnicalCosts(p);
+                const card = createPrinterCardHTML(p, costs);
+                grid.innerHTML += card;
+            });
+
+            // Render Chart
+            renderDashboardChart();
+        }
+
+        function renderDashboardChart() {
+            const ctx = document.getElementById('chart-dashboard-comparison');
+            if (!ctx) return;
+
+            const sortedPrinters = [...printers].map(p => {
+                const costs = calculateTechnicalCosts(p);
+                return { name: `${p.brand} ${p.model}`, bn: costs.bnCost, color: costs.colorCost };
+            }).sort((a, b) => a.bn - b.bn).slice(0, 5);
+
+            if (comparisonChart) comparisonChart.destroy();
+
+            comparisonChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sortedPrinters.map(p => p.name),
+                    datasets: [
+                        {
+                            label: 'Coste B/N (€/pág)',
+                            data: sortedPrinters.map(p => p.bn),
+                            backgroundColor: '#0284c7',
+                            borderRadius: 6
+                        },
+                        {
+                            label: 'Coste Color (€/pág)',
+                            data: sortedPrinters.map(p => p.color),
+                            backgroundColor: '#a855f7',
+                            borderRadius: 6
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) { return value.toFixed(4) + ' €'; }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        /* ========================================== */
+        /* RENDER VIEW 2: CATALOG WITH PAGINATION    */
+        /* ========================================== */
+        function renderCatalog() {
+            const search = document.getElementById('filter-search').value.toLowerCase();
+            const format = document.getElementById('filter-format').value;
+            const type = document.getElementById('filter-type').value;
+            const sort = document.getElementById('filter-sort').value;
+
+            let filtered = printers.filter(p => {
+                const matchesSearch = p.brand.toLowerCase().includes(search) || p.model.toLowerCase().includes(search);
+                const matchesFormat = format === 'ALL' || p.format === format;
+                const matchesType = type === 'ALL' || p.type === type;
+                return matchesSearch && matchesFormat && matchesType;
+            });
+
+            // Sorting
+            filtered.sort((a, b) => {
+                const cA = calculateTechnicalCosts(a);
+                const cB = calculateTechnicalCosts(b);
+                if (sort === 'bn_asc') return cA.bnCost - cB.bnCost;
+                if (sort === 'color_asc') return cA.colorCost - cB.colorCost;
+                if (sort === 'volume_desc') return b.recVolume - a.recVolume;
+                return (a.brand + a.model).localeCompare(b.brand + b.model);
+            });
+
+            const totalPages = Math.ceil(filtered.length / catalogItemsPerPage) || 1;
+            if (catalogCurrentPage > totalPages) catalogCurrentPage = totalPages;
+
+            const startIndex = (catalogCurrentPage - 1) * catalogItemsPerPage;
+            const paginatedItems = filtered.slice(startIndex, startIndex + catalogItemsPerPage);
+
+            const grid = document.getElementById('catalog-grid');
+            grid.innerHTML = '';
+
+            if (paginatedItems.length === 0) {
+                grid.innerHTML = `<div class="col-span-full text-center py-12 bg-white rounded-xl border border-slate-200">
+                    <i class="fa-solid fa-boxes-stacked text-4xl text-slate-300 mb-3"></i>
+                    <p class="text-slate-500 font-medium">No se encontraron impresoras con los filtros seleccionados.</p>
+                </div>`;
+            } else {
+                paginatedItems.forEach(p => {
+                    const costs = calculateTechnicalCosts(p);
+                    grid.innerHTML += createPrinterCardHTML(p, costs);
+                });
+            }
+
+            renderPagination('catalog-pagination', catalogCurrentPage, totalPages, 'changeCatalogPage');
+        }
+
+        function changeCatalogPage(page) {
+            catalogCurrentPage = page;
+            renderCatalog();
+            window.scrollTo({ top: 300, behavior: 'smooth' });
+        }
+
+        function createPrinterCardHTML(p, costs) {
+            return `
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm hover:border-brand-400 hover:shadow-md transition-all p-5 flex flex-col justify-between space-y-4">
+                <div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">${p.brand}</span>
+                            <h3 class="text-lg font-extrabold text-slate-800 leading-snug">${p.model}</h3>
+                        </div>
+                        <div class="flex gap-1.5">
+                            <span class="text-xs px-2 py-0.5 rounded-full font-bold ${p.type === 'Color' ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-800'}">${p.type}</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full font-bold bg-blue-100 text-blue-800">${p.format}</span>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-2"><i class="fa-solid fa-gauge-high mr-1"></i> Rec. Mensual: <strong>${p.recVolume.toLocaleString()} pág</strong></p>
+                </div>
+
+                <div class="bg-slate-50 p-3 rounded-lg border border-slate-100 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                        <span class="text-[10px] text-slate-400 uppercase font-bold block">Coste B/N</span>
+                        <span class="font-mono font-bold text-emerald-600">${costs.bnCost.toFixed(5)} €</span>
+                    </div>
+                    <div>
+                        <span class="text-[10px] text-slate-400 uppercase font-bold block">Coste Color</span>
+                        <span class="font-mono font-bold text-purple-600">${p.type === 'Color' ? costs.colorCost.toFixed(5) + ' €' : 'N/A'}</span>
+                    </div>
+                </div>
+
+                <div class="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                    <button onclick="navigateTo('printerDetail', '${p.id}')" class="flex-1 bg-slate-900 hover:bg-slate-800 text-white py-2 rounded-lg text-xs font-bold transition-all text-center">
+                        Ficha Técnica
+                    </button>
+                    <button onclick="navigateTo('manualCalc', '${p.id}')" title="Usar en Calculadora" class="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg border border-emerald-200 transition-all">
+                        <i class="fa-solid fa-calculator"></i>
+                    </button>
+                    <button onclick="editPrinter('${p.id}')" title="Editar Equipo" class="p-2 text-slate-600 hover:bg-slate-100 rounded-lg border border-slate-200 transition-all">
+                        <i class="fa-solid fa-pen"></i>
+                    </button>
+                    <button onclick="deletePrinter('${p.id}')" title="Eliminar Equipo" class="p-2 text-red-600 hover:bg-red-50 rounded-lg border border-red-200 transition-all">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </div>
+            </div>`;
+        }
+
+        /* ========================================== */
+        /* RENDER VIEW 3: GESTIÓN DE CONSUMIBLES     */
+        /* ========================================== */
+        function renderConsumables() {
+            const search = document.getElementById('filter-consumable-search').value.toLowerCase();
+            const filterType = document.getElementById('filter-consumable-type').value;
+
+            const consumableKeyLabels = {
+                tonerK: { label: 'Tóner Negro (K)', type: 'Tóner' },
+                drumK: { label: 'Tambor / Drum Negro (K)', type: 'Tambor' },
+                tonerC: { label: 'Tóner Cian (C)', type: 'Tóner' },
+                drumC: { label: 'Tambor / Drum Cian (C)', type: 'Tambor' },
+                tonerM: { label: 'Tóner Magenta (M)', type: 'Tóner' },
+                drumM: { label: 'Tambor / Drum Magenta (M)', type: 'Tambor' },
+                tonerY: { label: 'Tóner Amarillo (Y)', type: 'Tóner' },
+                drumY: { label: 'Tambor / Drum Amarillo (Y)', type: 'Tambor' },
+                fuser: { label: 'Kit Fusor', type: 'Fusor' },
+                transfer: { label: 'Correa de Transferencia', type: 'Correa' },
+                wasteBox: { label: 'Bote de Tóner Residual', type: 'Bote' }
+            };
+
+            // Flatten all consumables from all printers
+            let allConsumables = [];
+            printers.forEach(p => {
+                const c = p.consumables || {};
+                Object.keys(c).forEach(key => {
+                    const item = c[key];
+                    if (item && (item.price > 0 || item.yield > 0)) {
+                        const meta = consumableKeyLabels[key] || { label: key, type: 'Otro' };
+                        const cpp = item.yield > 0 ? (item.price / item.yield) : 0;
+                        allConsumables.push({
+                            printerId: p.id,
+                            printerName: `${p.brand} ${p.model}`,
+                            key: key,
+                            name: meta.label,
+                            type: meta.type,
+                            price: item.price,
+                            yield: item.yield,
+                            cpp: cpp
+                        });
+                    }
+                });
+            });
+
+            // Filter consumables
+            let filtered = allConsumables.filter(item => {
+                const matchesSearch = item.name.toLowerCase().includes(search) || item.printerName.toLowerCase().includes(search);
+                const matchesType = filterType === 'ALL' || item.type === filterType;
+                return matchesSearch && matchesType;
+            });
+
+            const totalPages = Math.ceil(filtered.length / consumableItemsPerPage) || 1;
+            if (consumableCurrentPage > totalPages) consumableCurrentPage = totalPages;
+
+            const startIndex = (consumableCurrentPage - 1) * consumableItemsPerPage;
+            const paginatedItems = filtered.slice(startIndex, startIndex + consumableItemsPerPage);
+
+            const tbody = document.getElementById('consumables-table-body');
+            tbody.innerHTML = '';
+
+            if (paginatedItems.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-500">No se encontraron consumibles registrados.</td></tr>`;
+            } else {
+                paginatedItems.forEach(item => {
+                    tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition-colors border-b border-slate-100">
+                        <td class="py-3 px-4 font-bold text-slate-800">${item.name}</td>
+                        <td class="py-3 px-4">
+                            <span class="text-xs px-2.5 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800">${item.type}</span>
+                        </td>
+                        <td class="py-3 px-4 text-slate-600 font-medium">${item.printerName}</td>
+                        <td class="py-3 px-4 text-right font-mono font-bold text-slate-800">${item.price.toFixed(2)} €</td>
+                        <td class="py-3 px-4 text-right font-mono text-slate-600">${item.yield.toLocaleString()} págs</td>
+                        <td class="py-3 px-4 text-right font-mono font-bold text-emerald-600">${item.cpp.toFixed(5)} €</td>
+                        <td class="py-3 px-4 text-center space-x-1">
+                            <button onclick="editConsumable('${item.printerId}', '${item.key}')" title="Modificar Consumible" class="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button onclick="deleteConsumable('${item.printerId}', '${item.key}')" title="Eliminar Consumible" class="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </td>
+                    </tr>`;
+                });
+            }
+
+            renderPagination('consumables-pagination', consumableCurrentPage, totalPages, 'changeConsumablePage');
+        }
+
+        function changeConsumablePage(page) {
+            consumableCurrentPage = page;
+            renderConsumables();
+            window.scrollTo({ top: 300, behavior: 'smooth' });
+        }
+
+        /* Modal Handlers for Consumables */
+        function openAddConsumableModal() {
+            const selectPrinter = document.getElementById('cons-modal-printer');
+            selectPrinter.innerHTML = '';
+            printers.forEach(p => {
+                selectPrinter.innerHTML += `<option value="${p.id}">${p.brand} ${p.model} (${p.type})</option>`;
+            });
+
+            document.getElementById('consumable-modal-title').innerText = "Añadir Consumible";
+            document.getElementById('cons-modal-price').value = "0.00";
+            document.getElementById('cons-modal-yield').value = "10000";
+            document.getElementById('consumable-modal').classList.remove('hidden');
+        }
+
+        function closeConsumableModal() {
+            document.getElementById('consumable-modal').classList.add('hidden');
+        }
+
+        function editConsumable(printerId, key) {
+            const p = printers.find(x => x.id === printerId);
+            if (!p) return;
+
+            openAddConsumableModal();
+            document.getElementById('consumable-modal-title').innerText = "Editar Consumible";
+            document.getElementById('cons-modal-printer').value = printerId;
+            document.getElementById('cons-modal-key').value = key;
+
+            const c = (p.consumables && p.consumables[key]) ? p.consumables[key] : { price: 0, yield: 0 };
+            document.getElementById('cons-modal-price').value = c.price;
+            document.getElementById('cons-modal-yield').value = c.yield;
+        }
+
+        function deleteConsumable(printerId, key) {
+            if (confirm("¿Estás seguro de eliminar este consumible? Sus valores pasarán a 0 €.")) {
+                const p = printers.find(x => x.id === printerId);
+                if (p && p.consumables && p.consumables[key]) {
+                    p.consumables[key].price = 0;
+                    p.consumables[key].yield = 0;
+                    savePrintersToStorage();
+                    renderConsumables();
+                    showToast("Consumible eliminado correctamente", "success");
+                }
+            }
+        }
+
+        function saveConsumableFromModal(e) {
+            e.preventDefault();
+            const printerId = document.getElementById('cons-modal-printer').value;
+            const key = document.getElementById('cons-modal-key').value;
+            const price = parseFloat(document.getElementById('cons-modal-price').value) || 0;
+            const itemYield = parseInt(document.getElementById('cons-modal-yield').value) || 0;
+
+            const p = printers.find(x => x.id === printerId);
+            if (p) {
+                if (!p.consumables) p.consumables = {};
+                p.consumables[key] = { price: price, yield: itemYield };
+                savePrintersToStorage();
+                closeConsumableModal();
+                renderConsumables();
+                showToast("Consumible guardado correctamente", "success");
+            }
+        }
+
+        /* ========================================== */
+        /* RENDER VIEW 4: FICHA TÉCNICA DETALLADA     */
+        /* ========================================== */
+        function renderPrinterDetail(printerId) {
+            const p = printers.find(x => x.id === printerId);
+            if (!p) return;
+            currentPrinterDetail = p;
+
+            const costs = calculateTechnicalCosts(p);
+
+            // Tech Header
+            document.getElementById('detail-header-card').innerHTML = `
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-xs font-bold uppercase tracking-wider text-brand-600">${p.brand}</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full font-bold ${p.type === 'Color' ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-800'}">${p.type}</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full font-bold bg-blue-100 text-blue-800">${p.format}</span>
+                        </div>
+                        <h1 class="text-3xl font-extrabold text-slate-900">${p.model}</h1>
+                        <p class="text-xs text-slate-500 mt-1">Ficha técnica detallada de prorrateo y durabilidades al 5% de cobertura ISO</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="editPrinter('${p.id}')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold border border-slate-300">
+                            <i class="fa-solid fa-pen"></i> Editar Equipo
+                        </button>
+                    </div>
+                </div>`;
+
+            document.getElementById('detail-cost-bn').innerText = `${costs.bnCost.toFixed(5)} €`;
+            document.getElementById('detail-cost-color').innerText = p.type === 'Color' ? `${costs.colorCost.toFixed(5)} €` : 'N/A';
+
+            const monthlyEst = (costs.bnCost * p.recVolume).toFixed(2);
+            document.getElementById('detail-cost-monthly-est').innerText = `${monthlyEst} €`;
+            document.getElementById('detail-cost-monthly-desc').innerText = `Simulado para ${p.recVolume.toLocaleString()} pág B/N`;
+
+            // Render Table Breakdown
+            const tbody = document.getElementById('detail-consumables-tbody');
+            tbody.innerHTML = '';
+
+            const keys = [
+                { key: 'tonerK', name: 'Tóner Negro (K)', type: 'Tóner' },
+                { key: 'drumK', name: 'Tambor / Drum Negro (K)', type: 'Tambor' },
+                { key: 'tonerC', name: 'Tóner Cian (C)', type: 'Tóner' },
+                { key: 'drumC', name: 'Tambor / Drum Cian (C)', type: 'Tambor' },
+                { key: 'tonerM', name: 'Tóner Magenta (M)', type: 'Tóner' },
+                { key: 'drumM', name: 'Tambor / Drum Magenta (M)', type: 'Tambor' },
+                { key: 'tonerY', name: 'Tóner Amarillo (Y)', type: 'Tóner' },
+                { key: 'drumY', name: 'Tambor / Drum Amarillo (Y)', type: 'Tambor' },
+                { key: 'fuser', name: 'Kit Fusor', type: 'Fusor' },
+                { key: 'transfer', name: 'Correa de Transferencia', type: 'Correa' },
+                { key: 'wasteBox', name: 'Bote de Tóner Residual', type: 'Bote' }
+            ];
+
+            const c = p.consumables || {};
+            keys.forEach(item => {
+                const data = c[item.key];
+                if (data && (data.price > 0 || data.yield > 0)) {
+                    const cpp = data.yield > 0 ? (data.price / data.yield) : 0;
+                    const pctBN = costs.bnCost > 0 ? ((cpp / costs.bnCost) * 100).toFixed(1) : 0;
+                    const pctColor = (p.type === 'Color' && costs.colorCost > 0) ? ((cpp / costs.colorCost) * 100).toFixed(1) : 0;
+
+                    tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="py-3 px-4 font-bold text-slate-800">${item.name}</td>
+                        <td class="py-3 px-4"><span class="text-xs px-2 py-0.5 rounded font-bold bg-slate-100 text-slate-700">${item.type}</span></td>
+                        <td class="py-3 px-4 text-right font-mono">${data.price.toFixed(2)} €</td>
+                        <td class="py-3 px-4 text-right font-mono">${data.yield.toLocaleString()} págs</td>
+                        <td class="py-3 px-4 text-right font-mono font-bold text-brand-600">${cpp.toFixed(5)} €</td>
+                        <td class="py-3 px-4 text-right text-xs text-slate-500">${pctBN}%</td>
+                        <td class="py-3 px-4 text-right text-xs text-slate-500">${p.type === 'Color' ? pctColor + '%' : '-'}</td>
+                    </tr>`;
+                }
+            });
+        }
+
+        function useInCalculatorCurrentPrinter() {
+            if (currentPrinterDetail) {
+                navigateTo('manualCalc', currentPrinterDetail.id);
+            }
+        }
+
+        /* ========================================== */
+        /* RENDER VIEW 5: TOP 10 RANKING              */
+        /* ========================================== */
+        function switchTop10Tab(tab) {
+            top10TabActive = tab;
+
+            const btnBN = document.getElementById('top10-tab-bn');
+            const btnColor = document.getElementById('top10-tab-color');
+
+            if (tab === 'bn') {
+                btnBN.className = "px-4 py-2 rounded-lg text-xs font-bold transition-all bg-white text-slate-800 shadow-sm";
+                btnColor.className = "px-4 py-2 rounded-lg text-xs font-bold transition-all text-slate-600 hover:text-slate-900";
+            } else {
+                btnColor.className = "px-4 py-2 rounded-lg text-xs font-bold transition-all bg-white text-slate-800 shadow-sm";
+                btnBN.className = "px-4 py-2 rounded-lg text-xs font-bold transition-all text-slate-600 hover:text-slate-900";
+            }
+
+            renderTop10();
+        }
+
+        function renderTop10() {
+            let list = [...printers].map(p => {
+                const costs = calculateTechnicalCosts(p);
+                return { printer: p, costs };
+            });
+
+            if (top10TabActive === 'bn') {
+                list.sort((a, b) => a.costs.bnCost - b.costs.bnCost);
+            } else {
+                list = list.filter(item => item.printer.type === 'Color');
+                list.sort((a, b) => a.costs.colorCost - b.costs.colorCost);
+            }
+
+            const podiumContainer = document.getElementById('top10-podium-container');
+            const listContainer = document.getElementById('top10-list-container');
+
+            podiumContainer.innerHTML = '';
+            listContainer.innerHTML = '';
+
+            // Top 3 Podium
+            const top3 = list.slice(0, 3);
+            const podiumColors = [
+                { border: 'border-amber-400', bg: 'bg-amber-50', badge: 'bg-amber-400 text-slate-950', rank: '1º LÍDER' },
+                { border: 'border-slate-300', bg: 'bg-slate-50', badge: 'bg-slate-300 text-slate-900', rank: '2º PUESTO' },
+                { border: 'border-amber-700', bg: 'bg-amber-900/10', badge: 'bg-amber-700 text-white', rank: '3º PUESTO' }
+            ];
+
+            top3.forEach((item, index) => {
+                const p = item.printer;
+                const c = item.costs;
+                const costVal = top10TabActive === 'bn' ? c.bnCost : c.colorCost;
+                const style = podiumColors[index];
+
+                podiumContainer.innerHTML += `
+                <div class="bg-white rounded-2xl border-2 ${style.border} p-5 shadow-sm relative flex flex-col justify-between space-y-4">
+                    <span class="absolute top-3 right-3 text-[10px] font-black px-2 py-0.5 rounded-full ${style.badge}">${style.rank}</span>
+                    <div>
+                        <span class="text-xs font-bold uppercase tracking-wider text-slate-400">${p.brand}</span>
+                        <h3 class="text-xl font-extrabold text-slate-900">${p.model}</h3>
+                        <p class="text-xs text-slate-500 mt-1">${p.format} • ${p.type}</p>
+                    </div>
+
+                    <div class="${style.bg} p-4 rounded-xl text-center space-y-1">
+                        <p class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Coste Técnico (${top10TabActive.toUpperCase()})</p>
+                        <p class="text-2xl font-black text-slate-900 font-mono">${costVal.toFixed(5)} €</p>
+                        <p class="text-[11px] text-slate-500">por página (Sin IVA)</p>
+                    </div>
+
+                    <button onclick="navigateTo('printerDetail', '${p.id}')" class="w-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold py-2 rounded-xl transition-all">
+                        Ver Ficha Técnica
+                    </button>
+                </div>`;
+            });
+
+            // Positions 4 to 10
+            const rest = list.slice(3, 10);
+            rest.forEach((item, index) => {
+                const p = item.printer;
+                const c = item.costs;
+                const costVal = top10TabActive === 'bn' ? c.bnCost : c.colorCost;
+
+                listContainer.innerHTML += `
+                <div class="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                    <div class="flex items-center gap-4">
+                        <span class="w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-black text-sm flex items-center justify-center shrink-0">
+                            ${index + 4}º
+                        </span>
+                        <div>
+                            <p class="font-bold text-slate-800 text-sm">${p.brand} ${p.model}</p>
+                            <p class="text-xs text-slate-500">${p.format} • ${p.type} • Rec. ${p.recVolume.toLocaleString()} pág</p>
+                        </div>
+                    </div>
+                    <div class="text-right flex items-center gap-4">
+                        <div>
+                            <p class="text-sm font-black font-mono text-slate-900">${costVal.toFixed(5)} €</p>
+                            <p class="text-[10px] text-slate-400 uppercase">Sin IVA / pág</p>
+                        </div>
+                        <button onclick="navigateTo('printerDetail', '${p.id}')" class="p-2 text-slate-400 hover:text-brand-600 transition-colors">
+                            <i class="fa-solid fa-chevron-right text-xs"></i>
+                        </button>
+                    </div>
+                </div>`;
+            });
+        }
+
+        /* ========================================== */
+        /* RENDER VIEW 6: CALCULADORA MPS MANUAL     */
+        /* ========================================== */
+        function initManualCalculator(printerIdParam = null) {
+            const select = document.getElementById('calc-printer-select');
+            select.innerHTML = '<option value="">-- Seleccionar equipo del catálogo --</option>';
+
+            printers.forEach(p => {
+                select.innerHTML += `<option value="${p.id}">${p.brand} ${p.model} (${p.format} - ${p.type})</option>`;
+            });
+
+            if (printerIdParam) {
+                select.value = printerIdParam;
+                loadPrinterIntoCalculator(printerIdParam);
+            } else {
+                recalculateManual();
+            }
+        }
+
+        function loadPrinterIntoCalculator(printerId) {
+            if (!printerId) return;
+            const p = printers.find(x => x.id === printerId);
+            if (!p) return;
+
+            const costs = calculateTechnicalCosts(p);
+            document.getElementById('calc-cost-bn').value = costs.bnCost.toFixed(5);
+            document.getElementById('calc-cost-color').value = p.type === 'Color' ? costs.colorCost.toFixed(5) : "0.00000";
+
+            recalculateManualFromMargin();
+        }
+
+        function recalculateManualFromMargin() {
+            const costBN = parseFloat(document.getElementById('calc-cost-bn').value) || 0;
+            const costColor = parseFloat(document.getElementById('calc-cost-color').value) || 0;
+            const margin = parseFloat(document.getElementById('calc-margin-input').value) || 40;
+
+            const multiplier = 1 + (margin / 100);
+            document.getElementById('calc-pvp-bn').value = (costBN * multiplier).toFixed(4);
+            document.getElementById('calc-pvp-color').value = (costColor * multiplier).toFixed(4);
+
+            recalculateManual();
+        }
+
+        function recalculateManualFromPVP() {
+            const costBN = parseFloat(document.getElementById('calc-cost-bn').value) || 0;
+            const pvpBN = parseFloat(document.getElementById('calc-pvp-bn').value) || 0;
+
+            if (costBN > 0) {
+                const marginBN = ((pvpBN - costBN) / costBN) * 100;
+                document.getElementById('calc-margin-input').value = Math.round(marginBN);
+                document.getElementById('calc-margin-range').value = Math.round(marginBN);
+            }
+
+            recalculateManual();
+        }
+
+        function recalculateManual() {
+            const volBN = parseFloat(document.getElementById('calc-vol-bn').value) || 0;
+            const volColor = parseFloat(document.getElementById('calc-vol-color').value) || 0;
+            const contractMonths = parseInt(document.getElementById('calc-contract-months').value) || 60;
+
+            const costBN = parseFloat(document.getElementById('calc-cost-bn').value) || 0;
+            const costColor = parseFloat(document.getElementById('calc-cost-color').value) || 0;
+
+            const pvpBN = parseFloat(document.getElementById('calc-pvp-bn').value) || 0;
+            const pvpColor = parseFloat(document.getElementById('calc-pvp-color').value) || 0;
+
+            const custBN = parseFloat(document.getElementById('calc-cust-bn').value) || 0;
+            const custColor = parseFloat(document.getElementById('calc-cust-color').value) || 0;
+
+            // Monthly Total Calculation (No Hardware Fee)
+            const totalBN = volBN * pvpBN;
+            const totalColor = volColor * pvpColor;
+            const monthlySubtotal = totalBN + totalColor;
+
+            const vat = monthlySubtotal * 0.21;
+            const monthlyTotalWithVat = monthlySubtotal + vat;
+
+            // Technical Cost
+            const techCostSum = (volBN * costBN) + (volColor * costColor);
+            const grossProfitMonth = monthlySubtotal - techCostSum;
+            const marginPercent = monthlySubtotal > 0 ? ((grossProfitMonth / monthlySubtotal) * 100) : 0;
+
+            // Contract Profits
+            const contractProfit = grossProfitMonth * contractMonths;
+            const annualProfit = grossProfitMonth * 12;
+
+            // Client Savings
+            const clientCurrentTotalMonth = (volBN * custBN) + (volColor * custColor);
+            const clientSavingsMonth = clientCurrentTotalMonth - monthlySubtotal;
+            const clientSavingsPercent = clientCurrentTotalMonth > 0 ? ((clientSavingsMonth / clientCurrentTotalMonth) * 100) : 0;
+            const clientContractSavings = clientSavingsMonth * contractMonths;
+
+            // Update UI
+            document.getElementById('res-contract-duration-badge').innerText = `${contractMonths} Meses`;
+            document.getElementById('res-total-invoice-subtotal').innerText = `${monthlySubtotal.toFixed(2)} €`;
+            document.getElementById('res-total-invoice-vat').innerText = `${vat.toFixed(2)} €`;
+            document.getElementById('res-total-invoice-total').innerText = `${monthlyTotalWithVat.toFixed(2)} €`;
+
+            document.getElementById('res-tech-cost-sum').innerText = `${techCostSum.toFixed(2)} €`;
+            document.getElementById('res-gross-profit-month').innerText = `${grossProfitMonth.toFixed(2)} €`;
+            document.getElementById('res-margin-percent').innerText = `${marginPercent.toFixed(1)} %`;
+
+            document.getElementById('res-contract-profit').innerText = `${contractProfit.toFixed(2)} €`;
+            document.getElementById('res-annual-profit').innerText = `${annualProfit.toFixed(2)} €`;
+
+            document.getElementById('res-client-monthly-savings').innerText = `${clientSavingsMonth.toFixed(2)} € / mes`;
+            document.getElementById('res-client-savings-percent').innerText = `${clientSavingsPercent.toFixed(1)}% de ahorro`;
+            document.getElementById('res-client-contract-savings').innerText = `Ahorro en contrato: ${clientContractSavings.toFixed(2)} € (Sin IVA)`;
+        }
+
+        /* Generate Commercial PDF Proposal */
+        function generateProposalPDF(type) {
+            const element = document.createElement('div');
+            element.className = 'p-8 bg-white font-sans text-slate-800 space-y-6';
+
+            const volBN = document.getElementById('calc-vol-bn').value;
+            const volColor = document.getElementById('calc-vol-color').value;
+            const pvpBN = document.getElementById('calc-pvp-bn').value;
+            const pvpColor = document.getElementById('calc-pvp-color').value;
+            const subtotal = document.getElementById('res-total-invoice-subtotal').innerText;
+            const totalWithVat = document.getElementById('res-total-invoice-total').innerText;
+
+            element.innerHTML = `
+                <div class="flex justify-between items-center border-b pb-4">
+                    <div>
+                        <h1 class="text-2xl font-black text-slate-900">PROPUESTA DE SERVICIOS MPS</h1>
+                        <p class="text-xs text-slate-500">PrintCost Pro - Soluciones de Impresión Gestionada</p>
+                    </div>
+                    <div class="text-right text-xs text-slate-400">
+                        <p>Fecha: ${new Date().toLocaleDateString('es-ES')}</p>
+                        <p>Ref: PROP-${Math.floor(Math.random()*89999+10000)}</p>
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 p-4 rounded-lg text-sm space-y-2">
+                    <h3 class="font-bold text-slate-800">Resumen de la Oferta Comercial</h3>
+                    <p><strong>Volumen B/N mensual incluido:</strong> ${volBN} páginas a ${pvpBN} €/pág (Sin IVA)</p>
+                    <p><strong>Volumen Color mensual incluido:</strong> ${volColor} páginas a ${pvpColor} €/pág (Sin IVA)</p>
+                </div>
+
+                <div class="border p-4 rounded-lg text-right space-y-1">
+                    <p class="text-sm font-bold">Cuota Mensual (Sin IVA): <span class="text-lg">${subtotal}</span></p>
+                    <p class="text-xs text-slate-500">+ 21% IVA</p>
+                    <p class="text-xl font-black text-brand-600">Total Mensual Con IVA: ${totalWithVat}</p>
+                </div>
+
+                <p class="text-[10px] text-slate-400 text-center pt-8">
+                    Esta propuesta incluye mantenimiento, piezas, tóners y servicio técnico integral.
+                </p>
+            `;
+
+            const opt = {
+                margin:       10,
+                filename:     `propuesta_printcost_${type}.pdf`,
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2 },
+                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+
+            html2pdf().set(opt).from(element).save();
+        }
+
+        /* ========================================== */
+        /* RENDER VIEW 7: AI ASSISTANT CHAT           */
+        /* ========================================== */
+        function sendAIMessage() {
+            const input = document.getElementById('ai-user-input');
+            const query = input.value.trim();
+            if (!query) return;
+
+            const container = document.getElementById('ai-chat-container');
+
+            // Append User Bubble
+            container.innerHTML += `
+                <div class="flex items-start justify-end gap-3 max-w-3xl ml-auto">
+                    <div class="bg-brand-600 text-white p-4 rounded-2xl rounded-tr-none shadow-sm text-sm">
+                        <p>${query}</p>
+                    </div>
+                </div>`;
+
+            input.value = '';
+            container.scrollTop = container.scrollHeight;
+
+            // Generate AI Response Simulation based on Catalog Data
+            setTimeout(() => {
+                let reply = "Entendido. Analizando la base de datos de costes de impresión... ";
+
+                const q = query.toLowerCase();
+                if (q.includes("5.000") || q.includes("5000") || q.includes("b/n")) {
+                    reply = "Para un volumen aproximado de **5.000 páginas/mes en B/N**, la opción más eficiente del catálogo es la **Lexmark XM3350** o la **OKI ES7170 MFP**, ya que ofrecen un coste técnico inferior a **0,0020 €/página** con tóners de alta capacidad.";
+                } else if (q.includes("color")) {
+                    reply = "En impresión a Color, la **Lexmark XC9525** destaca por sus tambores independientes de 80.000 páginas, logrando un coste combinado extraordinariamente bajo para proyectos A3/A4 exigentes.";
+                } else {
+                    reply = `He procesado tu consulta sobre "${query}". Basándome en tu catálogo actual con ${printers.length} modelos registrados, te aconsejo fijar un margen comercial de entre el 35% y el 50% para garantizar máxima competitividad en licitaciones MPS.`;
+                }
+
+                container.innerHTML += `
+                    <div class="flex items-start gap-3 max-w-3xl">
+                        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-cyan-500 flex items-center justify-center text-white shrink-0 shadow-sm">
+                            <i class="fa-solid fa-robot text-base"></i>
+                        </div>
+                        <div class="bg-white border border-slate-200 p-4 rounded-2xl rounded-tl-none shadow-sm text-sm space-y-2 text-slate-800">
+                            <p>${reply}</p>
+                        </div>
+                    </div>`;
+
+                container.scrollTop = container.scrollHeight;
+            }, 600);
+        }
+
+        function quickAskAI(text) {
+            document.getElementById('ai-user-input').value = text;
+            sendAIMessage();
+        }
+
+        function resetAIChat() {
+            document.getElementById('ai-chat-container').innerHTML = `
+                <div class="flex items-start gap-3 max-w-3xl">
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-cyan-500 flex items-center justify-center text-white shrink-0 shadow-sm">
+                        <i class="fa-solid fa-robot text-base"></i>
+                    </div>
+                    <div class="bg-white border border-slate-200 p-4 rounded-2xl rounded-tl-none shadow-sm text-sm space-y-2 text-slate-800">
+                        <p class="font-bold text-slate-900">¡Hola! Soy tu Asistente Especialista en Impresión MPS.</p>
+                        <p class="leading-relaxed">
+                            Conozco al detalle todo tu catálogo actual de impresoras, sus consumibles y costes técnicos sin IVA. Hazme cualquier pregunta técnica, sobre marcas o recomendación comercial.
+                        </p>
+                    </div>
+                </div>`;
+            showToast("Chat restablecido", "success");
+        }
+
+        /* ========================================== */
+        /* MODAL HANDLERS FOR PRINTERS                */
+        /* ========================================== */
+        function openAddPrinterModal() {
+            document.getElementById('modal-title').innerText = "Añadir Nueva Impresora";
+            document.getElementById('printer-form').reset();
+            document.getElementById('modal-printer-id').value = '';
+            document.getElementById('printer-modal').classList.remove('hidden');
+        }
+
+        function closePrinterModal() {
+            document.getElementById('printer-modal').classList.add('hidden');
+        }
+
+        function editPrinter(printerId) {
+            const p = printers.find(x => x.id === printerId);
+            if (!p) return;
+
+            openAddPrinterModal();
+            document.getElementById('modal-title').innerText = "Editar Impresora";
+            document.getElementById('modal-printer-id').value = p.id;
+            document.getElementById('modal-brand').value = p.brand;
+            document.getElementById('modal-model').value = p.model;
+            document.getElementById('modal-format').value = p.format;
+            document.getElementById('modal-type').value = p.type;
+            document.getElementById('modal-recVolume').value = p.recVolume;
+
+            const c = p.consumables || {};
+            const setVal = (idPrice, idYield, item) => {
+                document.getElementById(idPrice).value = item ? item.price : 0;
+                document.getElementById(idYield).value = item ? item.yield : 0;
+            };
+
+            setVal('modal-price-tonerK', 'modal-yield-tonerK', c.tonerK);
+            setVal('modal-price-drumK', 'modal-yield-drumK', c.drumK);
+            setVal('modal-price-fuser', 'modal-yield-fuser', c.fuser);
+            setVal('modal-price-transfer', 'modal-yield-transfer', c.transfer);
+            setVal('modal-price-wasteBox', 'modal-yield-wasteBox', c.wasteBox);
+
+            setVal('modal-price-tonerC', 'modal-yield-tonerC', c.tonerC);
+            setVal('modal-price-drumC', 'modal-yield-drumC', c.drumC);
+            setVal('modal-price-tonerM', 'modal-yield-tonerM', c.tonerM);
+            setVal('modal-price-drumM', 'modal-yield-drumM', c.drumM);
+            setVal('modal-price-tonerY', 'modal-yield-tonerY', c.tonerY);
+            setVal('modal-price-drumY', 'modal-yield-drumY', c.drumY);
+        }
+
+        function deletePrinter(printerId) {
+            if (confirm("¿Estás seguro de eliminar este equipo del catálogo?")) {
+                printers = printers.filter(x => x.id !== printerId);
+                savePrintersToStorage();
+                renderAll();
+                showToast("Equipo eliminado con éxito", "success");
+            }
+        }
+
+        function savePrinterFromModal(e) {
+            e.preventDefault();
+            const id = document.getElementById('modal-printer-id').value || 'printer-' + Date.now();
+            const brand = document.getElementById('modal-brand').value.trim();
+            const model = document.getElementById('modal-model').value.trim();
+            const format = document.getElementById('modal-format').value;
+            const type = document.getElementById('modal-type').value;
+            const recVolume = parseInt(document.getElementById('modal-recVolume').value) || 3000;
+
+            const getCons = (pId, yId) => ({
+                price: parseFloat(document.getElementById(pId).value) || 0,
+                yield: parseInt(document.getElementById(yId).value) || 0
+            });
+
+            const newPrinter = {
+                id,
+                brand,
+                model,
+                format,
+                type,
+                recVolume,
+                consumables: {
+                    tonerK: getCons('modal-price-tonerK', 'modal-yield-tonerK'),
+                    drumK: getCons('modal-price-drumK', 'modal-yield-drumK'),
+                    fuser: getCons('modal-price-fuser', 'modal-yield-fuser'),
+                    transfer: getCons('modal-price-transfer', 'modal-yield-transfer'),
+                    wasteBox: getCons('modal-price-wasteBox', 'modal-yield-wasteBox'),
+
+                    tonerC: getCons('modal-price-tonerC', 'modal-yield-tonerC'),
+                    drumC: getCons('modal-price-drumC', 'modal-yield-drumC'),
+                    tonerM: getCons('modal-price-tonerM', 'modal-yield-tonerM'),
+                    drumM: getCons('modal-price-drumM', 'modal-yield-drumM'),
+                    tonerY: getCons('modal-price-tonerY', 'modal-yield-tonerY'),
+                    drumY: getCons('modal-price-drumY', 'modal-yield-drumY')
+                }
+            };
+
+            const index = printers.findIndex(x => x.id === id);
+            if (index >= 0) {
+                printers[index] = newPrinter;
+            } else {
+                printers.push(newPrinter);
+            }
+
+            savePrintersToStorage();
+            closePrinterModal();
+            renderAll();
+            showToast("Equipo guardado correctamente en el catálogo", "success");
+        }
+
+        /* ========================================== */
+        /* MASTER RENDER ALL                          */
+        /* ========================================== */
+        function renderAll() {
+            renderDashboard();
+            renderCatalog();
+            renderConsumables();
+            renderTop10();
+        }
+
+        // DOM Loaded Initializer
+        document.addEventListener('DOMContentLoaded', () => {
+            loadPrintersFromStorage();
+            renderAll();
+        });
+    </script>
+</body>
+</html>
