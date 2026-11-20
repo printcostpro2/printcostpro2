@@ -540,8 +540,7 @@ service cloud.firestore {
     match /printcost/{documentId} {
       allow read, write: if request.auth != null
         && (
-          (documentId == 'shared'
-            && request.auth.token.firebase.sign_in_provider == 'anonymous')
+          (documentId == 'shared')
           ||
           (documentId != 'shared'
             && request.auth.uid == documentId
