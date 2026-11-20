@@ -308,7 +308,7 @@ new_sync = r'''/* ============================================================
         el.textContent = msg;
         el.className = 'text-xs font-semibold ' + ({ ok: 'text-emerald-600', err: 'text-rose-600', warn: 'text-amber-600' }[kind] || 'text-slate-500');
     }
-    function badge(state) {
+    function badge(state, detail) {
         const b = $('firebase-sync-badge'); if (!b) return;
         const amber = 'bg-amber-100 text-amber-800 border border-amber-300', green = 'bg-emerald-100 text-emerald-800 border border-emerald-300', red = 'bg-rose-100 text-rose-800 border border-rose-300';
         const base = ' text-[11px] px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1.5';
@@ -318,14 +318,22 @@ new_sync = r'''/* ============================================================
             synced: [green, 'fa-cloud-arrow-up', 'Sincronizado'],
             error: [red, 'fa-triangle-exclamation', 'Error de sincronización']
         }[state];
-        b.className = map[0] + base; b.innerHTML = '<i class="fa-solid ' + map[1] + '"></i> ' + map[2];
+        b.className = map[0] + base;
+        b.title = detail || map[2];
+        b.setAttribute('aria-label', detail ? 'Error de sincronización: ' + detail : map[2]);
+        const visibleLabel = state === 'error' && detail ? ('Error: ' + String(detail).slice(0, 54)) : map[2];
+        b.innerHTML = '<i class="fa-solid ' + map[1] + '"></i> ' + visibleLabel;
     }
     function friendly(e) {
         const c = (e && e.code) || '';
-        if (c === 'auth/operation-not-allowed') return 'Activa «Anónimo» en Firebase Authentication > Método de acceso.';
-        if (c === 'auth/network-request-failed') return 'Sin conexión. Comprueba tu red.';
-        if (c === 'permission-denied' || c === 'firestore/permission-denied') return 'Firebase está conectado, pero debes actualizar las reglas de Firestore que aparecen en esta pantalla.';
-        return (e && e.message) || String(e);
+        if (c === 'auth/operation-not-allowed') return 'activa el acceso Anónimo en Firebase Authentication';
+        if (c === 'auth/unauthorized-domain') return 'añade el dominio de la app en Firebase Authentication > Dominios autorizados';
+        if (c === 'auth/network-request-failed') return 'sin conexión de red con Firebase';
+        if (c === 'permission-denied' || c === 'firestore/permission-denied') return 'Firestore deniega el acceso: revisa las reglas del documento printcost/shared';
+        if (c === 'unavailable' || c === 'firestore/unavailable' || c === 'deadline-exceeded') return 'Firebase no responde temporalmente; se volverá a intentar';
+        if (c === 'failed-precondition') return 'Firestore no está listo o necesita configuración en Firebase Console';
+        const message = (e && e.message) || String(e);
+        return c ? c + ': ' + message : message;
     }
 
     function stop() {
@@ -374,14 +382,14 @@ new_sync = r'''/* ============================================================
         const cur = snap(), h = hashOf(cur);
         if (!force && h === lastHash) return;
         const payload = JSON.stringify(cur);
-        if (payload.length > MAX_CHARS) { status('Los datos superan el límite de sincronización (1 MB).', 'err'); badge('error'); return; }
+        if (payload.length > MAX_CHARS) { status('Los datos superan el límite de sincronización (1 MB).', 'err'); badge('error', 'los datos superan el límite de sincronización'); return; }
         busy = true;
         try {
             const ts = Date.now();
             await docRef.set({ payload: payload, updatedAt: ts, deviceId: deviceId, v: 2 });
             lastHash = h; setMeta({ uid: 'shared', lastTs: ts, hash: h });
             status('Sincronizado a las ' + clock(), 'ok'); badge('synced');
-        } catch (e) { status('Error al sincronizar: ' + friendly(e), 'err'); badge('error'); }
+        } catch (e) { status('Error al sincronizar: ' + friendly(e), 'err'); badge('error', friendly(e)); }
         finally { busy = false; }
     }
 
@@ -412,7 +420,7 @@ new_sync = r'''/* ============================================================
             }
         } catch (e) {
             status('Error al conectar con los datos compartidos: ' + friendly(e), 'err');
-            badge('error');
+            badge('error', friendly(e));
             scheduleSyncRetry(e);
             return;
         }
@@ -445,7 +453,7 @@ new_sync = r'''/* ============================================================
                 await auth.signInAnonymously();
                 authRetryDelay = 1500;
             } catch (e) {
-                status('No se pudo autorizar este dispositivo: ' + friendly(e), 'err'); badge('error');
+                status('No se pudo autorizar este dispositivo: ' + friendly(e), 'err'); badge('error', friendly(e));
                 const code = (e && e.code) || '';
                 if (!['auth/operation-not-allowed', 'auth/invalid-api-key', 'auth/app-deleted'].includes(code)) {
                     scheduleAuthRetry();
@@ -481,7 +489,7 @@ new_sync = r'''/* ============================================================
                 await firebase.auth().signOut();
                 await firebase.auth().signInAnonymously();
             } catch (e) {
-                status('No se pudo preparar la sesión anterior: ' + friendly(e), 'err'); badge('error');
+                status('No se pudo preparar la sesión anterior: ' + friendly(e), 'err'); badge('error', friendly(e));
             } finally { authTransition = false; }
             return;
         }
@@ -517,12 +525,12 @@ new_sync = r'''/* ============================================================
                 }
                 authUnsub = auth.onAuthStateChanged(onUser, function (e) {
                     status('Error de autenticación Firebase: ' + friendly(e), 'err');
-                    badge('error');
+                    badge('error', friendly(e));
                     scheduleAuthRetry();
                 });
             } catch (e) {
                 status('No se pudo restaurar la sesión Firebase: ' + friendly(e), 'err');
-                badge('error');
+                badge('error', friendly(e));
                 scheduleAuthRetry();
             }
         })();
