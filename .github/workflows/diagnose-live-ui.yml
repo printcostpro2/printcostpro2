@@ -24,6 +24,23 @@ jobs:
           test "$(wc -c < diagnostic/index.html)" -gt 100000
           echo "HTML_BYTES=$(wc -c < diagnostic/index.html)"
           sha256sum diagnostic/index.html
+          python3 - <<'PYFIX'
+          from pathlib import Path
+          p = Path("diagnostic/index.html")
+          html = p.read_text(encoding="utf-8")
+          broken = "})();ts);\\n        detach();\\n    };\\n})();"
+          count = html.count(broken)
+          print(f"TRAILING_FRAGMENT_MATCHES={count}")
+          if count != 1:
+              raise SystemExit("El fragmento roto no aparece exactamente una vez; no se modifica el HTML.")
+          html = html.replace(broken, "})();", 1)
+          p.write_text(html, encoding="utf-8")
+          PYFIX
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add diagnostic/index.html
+          git commit -m "Capture fixed live HTML for repair analysis [skip ci]" || true
+          git push origin HEAD:diagnose-ui-20261120
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add diagnostic/index.html
