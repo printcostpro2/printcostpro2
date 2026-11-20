@@ -34,6 +34,16 @@ jobs:
           grep -q "app-unlock-password" y/index.html
           echo "Current application recovered and password screen verified."
 
+      - name: Reinforce persistent Firebase configuration storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/patch_firebase_config_persistence.py
+          grep -q "PRINTCOST PRO: persistencia redundante" y/index.html
+          grep -q "printcost_firebase_config_backup" y/index.html
+          grep -q "printcostpro_settings_v1" y/index.html
+          echo "Firebase configuration will be restored after restarting the app."
+
       - name: Add the updated privacy policy
         shell: bash
         run: |
