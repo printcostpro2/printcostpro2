@@ -180,11 +180,18 @@ jobs:
             await page.waitForTimeout(400);
             const catalog = await page.evaluate(() => ({
               cards: document.querySelectorAll('#catalog-grid > *').length,
+              pages: document.querySelectorAll('#catalog-pagination button').length,
               text: (document.getElementById('catalog-grid')?.innerText || '').slice(0,500),
               addButton: [...document.querySelectorAll('button')].some(b => /Añadir Impresora|Nueva Impresora/i.test(b.innerText||b.textContent||''))
             }));
             console.log('CATALOG=' + JSON.stringify(catalog));
-            if (catalog.cards < 30) throw new Error('El catálogo no muestra los 36 equipos. Tarjetas: ' + catalog.cards);
+            if (catalog.cards !== 6 || catalog.pages !== 6) throw new Error('La paginación del catálogo no muestra los 36 equipos en grupos de seis. Tarjetas: ' + catalog.cards + ', páginas: ' + catalog.pages);
+            const firstPageText = catalog.text;
+            await page.locator('#catalog-pagination button').nth(1).click();
+            await page.waitForTimeout(200);
+            const secondPageText = await page.locator('#catalog-grid').innerText();
+            if (!secondPageText || secondPageText === firstPageText) throw new Error('La paginación no cambia de modelos en la segunda página.');
+            console.log('CATALOG_PAGINATION=OK (6 páginas, 6 equipos por página)');
 
             await page.locator('button[onclick="openAddPrinterModal()"]').first().click();
             await page.waitForTimeout(200);
