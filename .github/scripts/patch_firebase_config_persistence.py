@@ -709,7 +709,7 @@ if cleanup_marker in html:
         raise SystemExit("El script de limpieza anterior está incompleto; despliegue cancelado.")
     html = html[:script_start] + cleanup_script + html[script_end + len('</script>'):]
 else:
-    html += '\\n' + cleanup_script + '\\n'
+    html += '\n' + cleanup_script + '\n'
 
 TARGET.write_text(html, encoding="utf-8")
 print("Estado Firebase y persistencia de sesión actualizados correctamente.")
