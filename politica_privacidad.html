@@ -29,7 +29,7 @@
   <header>
     <div class="brand">PrintCost Pro</div>
     <h1>Política de privacidad</h1>
-    <p class="updated"><strong>Última actualización:</strong> 18 de noviembre de 2026</p>
+    <p class="updated"><strong>Última actualización:</strong> 20 de noviembre de 2026</p>
   </header>
 
   <h2>1. Responsable del tratamiento</h2>
@@ -43,9 +43,10 @@
   <p>La modalidad gratuita almacena la información en el propio dispositivo. No es necesario crear una cuenta de Firebase ni conectar la aplicación a un servicio en la nube.</p>
   <p>La modalidad Premium habilita la funcionalidad para que el usuario conecte PrintCost Pro con <strong>su propio proyecto de Firebase</strong>. Premium no incluye una base de datos alojada, creada o administrada por el desarrollador de PrintCost Pro.</p>
   <p>Para utilizar esta funcionalidad, el usuario deberá crear y gestionar su propia cuenta y proyecto de Firebase, configurar los servicios necesarios y añadir en PrintCost Pro los datos de configuración de su proyecto. El usuario es responsable de la configuración, las reglas de seguridad, los permisos y la administración de ese proyecto.</p>
-  <p>Al configurar el mismo proyecto de Firebase en varios dispositivos, el usuario podrá acceder a la información común desde ellos, siempre que la configuración de la base de datos, autenticación y permisos lo permita. La sincronización y el acceso efectivo dependen de la configuración que realice el propio usuario.</p>
+  <p>Al configurar el mismo proyecto de Firebase en varios dispositivos, todos podrán acceder al mismo conjunto de datos compartidos. Para ello, PrintCost Pro utiliza Firebase Authentication con acceso anónimo: cada dispositivo obtiene automáticamente un identificador técnico independiente, sin pedir al usuario una dirección de correo electrónico, contraseña ni una cuenta compartida. Los dispositivos escriben y leen el documento común de sincronización del proyecto.</p>
+  <p>La conexión puede transmitir al proyecto Firebase el contenido de los catálogos, presupuestos, auditorías y ajustes seleccionados para sincronización, además de un identificador técnico de dispositivo, el identificador anónimo de Firebase y marcas de tiempo de sincronización. Estos identificadores se utilizan para autorizar la conexión y coordinar las actualizaciones entre dispositivos; no se utilizan para crear una cuenta personal en PrintCost Pro.</p>
   <p>El desarrollador de PrintCost Pro no crea ni administra los proyectos Firebase de los usuarios y no dispone de acceso administrativo a sus bases de datos. Los datos enviados mediante esta conexión se almacenan en el proyecto Firebase elegido y controlado por el usuario, conforme a la configuración y a las condiciones de Google Firebase.</p>
-  <p>La clave o configuración pública de una aplicación Firebase no sustituye las medidas de seguridad: el usuario debe configurar correctamente la autenticación y las reglas de seguridad de su base de datos y evitar reglas que permitan accesos no autorizados.</p>
+  <p>La configuración pública de Firebase no es una contraseña ni constituye por sí sola una medida de seguridad. Las reglas de Firestore de esta modalidad permiten el acceso al documento compartido a sesiones autenticadas del proyecto, incluidas las sesiones anónimas. Por tanto, cualquier persona que consiga acceder a ese proyecto y autenticarse podría acceder a los datos compartidos. El usuario debe proteger su proyecto y puede reforzar la protección mediante Firebase App Check. El desarrollador recomienda no utilizar esta modalidad para datos especialmente sensibles sin aplicar medidas adicionales de seguridad.</p>
 
   <h2>4. Envío de propuestas por correo</h2>
   <p>Al enviar un presupuesto o propuesta por correo, la aplicación puede abrir tu cliente o servicio de correo con el texto preparado. El envío lo realiza tu proveedor de correo; PrintCost Pro no envía el mensaje por sus propios servidores ni recibe una copia, salvo que una funcionalidad futura indique expresamente lo contrario.</p>
