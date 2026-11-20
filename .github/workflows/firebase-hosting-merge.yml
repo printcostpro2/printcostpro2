@@ -34,7 +34,7 @@ jobs:
           grep -q "app-unlock-password" y/index.html
           echo "Current application recovered and password screen verified."
 
-      - name: Reinforce persistent Firebase configuration storage
+      - name: Configure persistent Firebase and shared anonymous synchronization
         shell: bash
         run: |
           set -euo pipefail
@@ -42,7 +42,14 @@ jobs:
           grep -q "PRINTCOST PRO: persistencia redundante" y/index.html
           grep -q "printcost_firebase_config_backup" y/index.html
           grep -q "printcostpro_settings_v1" y/index.html
-          echo "Firebase configuration will be restored after restarting the app."
+          grep -q "signInAnonymously" y/index.html
+          grep -q "doc(SHARED_DOC)" y/index.html
+          grep -q "documentId == 'shared'" y/index.html
+          if grep -q 'id="cloud-email"' y/index.html || grep -q 'id="cloud-password"' y/index.html; then
+            echo "Obsolete shared email/password login fields remain in the app."
+            exit 1
+          fi
+          echo "Firebase config persistence and shared anonymous per-device sync verified."
 
       - name: Add the updated privacy policy
         shell: bash
