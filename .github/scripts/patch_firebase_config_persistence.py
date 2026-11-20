@@ -294,6 +294,7 @@ new_sync = r'''/* ============================================================
     })();
     let user = null, docRef = null, unsub = null, timer = null, lastHash = '', attached = false, busy = false;
     let authUnsub = null, authTransition = false, enabled = false, authRetryTimer = null, authRetryDelay = 1500, attachPromise = null;
+    let syncRetryTimer = null, syncRetryDelay = 2000;
 
     const $ = id => document.getElementById(id);
     const getMeta = () => { try { return JSON.parse(localStorage.getItem(META) || '{}') || {}; } catch (e) { return {}; } };
@@ -330,6 +331,17 @@ new_sync = r'''/* ============================================================
     function stop() {
         if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
         if (timer) { clearInterval(timer); timer = null; }
+    }
+
+    function scheduleSyncRetry(error) {
+        if (!enabled || !user || !docRef || syncRetryTimer) return;
+        const detail = friendly(error);
+        status('Conexión temporalmente interrumpida (' + detail + '). Reintentando automáticamente…', 'warn');
+        syncRetryTimer = setTimeout(function () {
+            syncRetryTimer = null;
+            if (enabled && user && docRef) begin();
+        }, syncRetryDelay);
+        syncRetryDelay = Math.min(syncRetryDelay * 2, 30000);
     }
 
     function applyRemote(d) {
@@ -375,6 +387,7 @@ new_sync = r'''/* ============================================================
 
     async function begin() {
         stop();
+        if (syncRetryTimer) { clearTimeout(syncRetryTimer); syncRetryTimer = null; }
         if (!docRef || !user) return;
         status('Sincronizando…');
         try {
@@ -397,13 +410,23 @@ new_sync = r'''/* ============================================================
             } else {
                 await push(true);
             }
-        } catch (e) { status('Error al conectar con los datos compartidos: ' + friendly(e), 'err'); badge('error'); return; }
+        } catch (e) {
+            status('Error al conectar con los datos compartidos: ' + friendly(e), 'err');
+            badge('error');
+            scheduleSyncRetry(e);
+            return;
+        }
+        syncRetryDelay = 2000;
         unsub = docRef.onSnapshot(function (s) {
             if (!s.exists || (s.metadata && s.metadata.hasPendingWrites)) return;
             const d = s.data(), m = getMeta();
             if (d.deviceId === deviceId || (d.updatedAt || 0) <= (m.lastTs || 0)) return;
             applyRemote(d);
-        }, function (e) { status('Error de conexión: ' + friendly(e), 'err'); badge('error'); });
+        }, function (e) {
+            status('Error de conexión con Firestore: ' + friendly(e), 'err');
+            badge('error');
+            scheduleSyncRetry(e);
+        });
         timer = setInterval(function () { push(false); }, 3000);
     }
 
@@ -509,6 +532,7 @@ new_sync = r'''/* ============================================================
     function detach() {
         enabled = false; stop(); user = null; docRef = null;
         if (authRetryTimer) { clearTimeout(authRetryTimer); authRetryTimer = null; }
+        if (syncRetryTimer) { clearTimeout(syncRetryTimer); syncRetryTimer = null; }
         attachPromise = null;
         if (authUnsub) { try { authUnsub(); } catch (e) {} authUnsub = null; }
         attached = false;
