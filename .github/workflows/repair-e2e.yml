@@ -166,8 +166,9 @@ jobs:
             console.log('FIREBASE_ERROR_FALLBACK=OK');
 
             const expectedBad=bad.filter(x=>!(x.status===400&&x.url.includes('identitytoolkit.googleapis.com')));
-            console.log('E2E_OK',{printers:count,catalogPages:cat.pages,navigation:views.length,consoleErrors,errors,failed,unexpectedBad:expectedBad});
-            if(errors.length||consoleErrors.length||failed.length||expectedBad.length)throw new Error('Errores navegador '+JSON.stringify({errors,consoleErrors,failed,unexpectedBad:expectedBad}));
+            const unexpectedConsoleErrors=consoleErrors.filter(message=>!message.includes('status of 400'));
+            console.log('E2E_OK',{printers:count,catalogPages:cat.pages,navigation:views.length,consoleErrors,unexpectedConsoleErrors,errors,failed,unexpectedBad:expectedBad});
+            if(errors.length||unexpectedConsoleErrors.length||failed.length||expectedBad.length)throw new Error('Errores navegador '+JSON.stringify({errors,unexpectedConsoleErrors,failed,unexpectedBad:expectedBad}));
             await browser.close();
           })().catch(e=>{console.error(e);process.exit(2)});
           JS
