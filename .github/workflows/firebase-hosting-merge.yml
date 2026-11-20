@@ -1,0 +1,53 @@
+name: Deploy PrintCost Pro to Firebase Hosting
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+
+concurrency:
+  group: printcostpro2-hosting-live
+  cancel-in-progress: false
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Recover the currently published application
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p y
+          curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
+            "https://printcostpro2-b0737.web.app/index.html" \
+            --output y/index.html
+          test -s y/index.html
+          test "$(wc -c < y/index.html)" -ge 100000
+          grep -q "app-unlock-password" y/index.html
+          echo "Current application recovered and password screen verified."
+
+      - name: Add the updated privacy policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s politica_privacidad.html
+          cp politica_privacidad.html y/politica-privacidad.html
+          grep -qi "PrintCost Pro" y/politica-privacidad.html
+          grep -qi "Firebase" y/politica-privacidad.html
+          echo "Privacy page ready at /politica-privacidad.html."
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRINTCOSTPRO2_B0737 }}
+          channelId: live
+          projectId: printcostpro2-b0737
