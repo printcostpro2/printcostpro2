@@ -754,6 +754,53 @@ new_sync = new_sync.replace(
     1
 )
 
+# FIX: conservar el JSON aunque Firebase rechace la autenticación.
+new_sync = new_sync.replace(
+    """        try { localStorage.removeItem('printcost_firebase_config'); } catch (e) {}
+        try { document.cookie = 'printcost_firebase_config_backup=; Max-Age=0; Path=/; SameSite=Lax; Secure'; } catch (e) {}
+        try {
+            if (window.indexedDB) {
+                const db = await new Promise((resolve, reject) => {
+                    const request = indexedDB.open('printcostpro_settings_v1', 1);
+                    request.onsuccess = () => resolve(request.result);
+                    request.onerror = () => reject(request.error);
+                });
+                await new Promise((resolve, reject) => {
+                    const tx = db.transaction('settings', 'readwrite');
+                    tx.objectStore('settings').delete('printcost_firebase_config');
+                    tx.oncomplete = resolve;
+                    tx.onerror = () => reject(tx.error);
+                    tx.onabort = () => reject(tx.error);
+                });
+                db.close();
+            }
+        } catch (storageError) { console.warn('No se pudo borrar el respaldo de configuración Firebase:', storageError); }
+        const input = $('firebase-json-input');
+        if (input) input.value = '';
+        const account = $('cloud-sync-account');
+        if (account) account.textContent = '';
+        badge('local');
+        status('Modo local activado. La clave API de Firebase guardada no es válida; pega una configuración válida en Ajustes para activar la nube.', 'warn');""",
+    """        // No borrar el JSON: la persistencia de la configuración es independiente
+        // del resultado de autenticación. El usuario debe poder corregirlo en Ajustes.
+        const input = $('firebase-json-input');
+        const account = $('cloud-sync-account');
+        if (account) account.textContent = '';
+        badge('local');
+        status('Firebase no ha aceptado la clave API. La configuración se conserva en este dispositivo; revisa el JSON y las restricciones de la API. La aplicación sigue funcionando en modo local.', 'warn');""",
+    1
+)
+
+save_notice_old = "alert('¡Configuración de Firebase guardada y conectada correctamente!');"
+save_notice_new = "alert('Configuración guardada permanentemente en este dispositivo. Comprobando la conexión con Firebase…');"
+if save_notice_old in html:
+    html = html.replace(save_notice_old, save_notice_new)
+elif save_notice_new not in html:
+    raise SystemExit("No se encontró el mensaje de guardado de Firebase; despliegue cancelado.")
+
+if "removeItem('printcost_firebase_config')" in new_sync:
+    raise SystemExit("La sincronización todavía contiene una eliminación automática del JSON; despliegue cancelado.")
+
 required = [
     "function isInvalidApiKey(e)",
     "async function returnToLocalMode(error)",
