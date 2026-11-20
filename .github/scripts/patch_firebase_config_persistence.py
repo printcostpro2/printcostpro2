@@ -416,7 +416,8 @@ new_sync = r'''/* ============================================================
             try {
                 const auth = firebase.auth();
                 if (firebase.auth.Auth && firebase.auth.Auth.Persistence) {
-                    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+                    try { await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); }
+                    catch (persistenceError) { console.warn('Firebase no admite persistencia LOCAL en este navegador; se usará la persistencia predeterminada.', persistenceError); }
                 }
                 await auth.signInAnonymously();
                 authRetryDelay = 1500;
@@ -488,7 +489,8 @@ new_sync = r'''/* ============================================================
             try {
                 const auth = firebase.auth();
                 if (firebase.auth.Auth && firebase.auth.Auth.Persistence) {
-                    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+                    try { await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); }
+                    catch (persistenceError) { console.warn('No se pudo fijar persistencia LOCAL; se usará la configuración predeterminada.', persistenceError); }
                 }
                 authUnsub = auth.onAuthStateChanged(onUser, function (e) {
                     status('Error de autenticación Firebase: ' + friendly(e), 'err');
@@ -879,6 +881,44 @@ firebase_bootstrap = r'''<script id="printcost-firebase-config-autorestore">
     if (window.__printcostFirebaseAutoRestoreInstalled) return;
     window.__printcostFirebaseAutoRestoreInstalled = true;
     let started = false;
+    let fieldRestoreRunning = false;
+
+    async function restoreSavedConfigInField() {
+        if (fieldRestoreRunning) return;
+        const input = document.getElementById('firebase-json-input');
+        if (!input || input.value.trim()) return;
+        fieldRestoreRunning = true;
+        try {
+            let raw = null;
+            try { raw = localStorage.getItem('printcost_firebase_config'); } catch (e) {}
+            if (!raw) {
+                try {
+                    const cookie = document.cookie.split(';').map(v => v.trim()).find(v => v.startsWith('printcost_firebase_config_backup='));
+                    if (cookie) raw = decodeURIComponent(cookie.slice('printcost_firebase_config_backup='.length));
+                } catch (e) {}
+            }
+            if (!raw && window.indexedDB) {
+                try {
+                    const request = indexedDB.open('printcostpro_settings_v1', 1);
+                    raw = await new Promise((resolve, reject) => {
+                        request.onsuccess = () => {
+                            const db = request.result;
+                            const tx = db.transaction('settings', 'readonly');
+                            const get = tx.objectStore('settings').get('printcost_firebase_config');
+                            get.onsuccess = () => { const value = get.result || null; db.close(); resolve(value); };
+                            get.onerror = () => { const error = get.error; db.close(); reject(error); };
+                        };
+                        request.onerror = () => reject(request.error);
+                    });
+                } catch (e) {}
+            }
+            if (raw && input.isConnected && !input.value.trim()) {
+                const cfg = JSON.parse(raw);
+                if (cfg && cfg.apiKey && cfg.projectId) input.value = JSON.stringify(cfg, null, 2);
+            }
+        } catch (e) { console.warn('No se pudo rellenar el campo con la configuración Firebase guardada:', e); }
+        finally { fieldRestoreRunning = false; }
+    }
 
     async function restoreWhenReady() {
         if (started) return;
@@ -939,7 +979,14 @@ firebase_bootstrap = r'''<script id="printcost-firebase-config-autorestore">
         }
     }
 
-    function launch() { setTimeout(restoreWhenReady, 300); }
+    function launch() {
+        setTimeout(restoreWhenReady, 300);
+        setTimeout(restoreSavedConfigInField, 500);
+        if (document.documentElement) {
+            const observer = new MutationObserver(function () { restoreSavedConfigInField(); });
+            observer.observe(document.documentElement, { childList: true, subtree: true });
+        }
+    }
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', launch, { once: true });
     } else launch();
