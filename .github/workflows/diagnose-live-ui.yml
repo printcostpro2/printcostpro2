@@ -28,7 +28,7 @@ jobs:
           from pathlib import Path
           p = Path("diagnostic/index.html")
           html = p.read_text(encoding="utf-8")
-          broken = "})();ts);\\n        detach();\\n    };\\n})();"
+          broken = "})();ts);\n        detach();\n    };\n})();"
           count = html.count(broken)
           print(f"TRAILING_FRAGMENT_MATCHES={count}")
           if count != 1:
