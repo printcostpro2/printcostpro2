@@ -1249,5 +1249,24 @@ if 'id="printcost-firebase-config-autorestore"' not in html:
     html += '\n' + firebase_bootstrap + '\n'
 
 
+# PRINT COST PRO: no perder la configuración por un fallo temporal y reintentar también los envíos.
+new_sync = new_sync.replace(
+    "else { status('Error al sincronizar: ' + friendly(e), 'err'); badge('error', friendly(e)); }",
+    "else { status('Error al sincronizar: ' + friendly(e), 'err'); badge('error', friendly(e)); scheduleSyncRetry(e); }"
+);
+# Una API inválida debe detener el intento, pero nunca borrar el JSON guardado.
+new_sync = new_sync.replace(
+    "try { localStorage.removeItem('printcost_firebase_config'); } catch (e) {}",
+    "/* Se conserva el JSON para que el usuario pueda corregirlo sin volver a pegarlo. */"
+);
+new_sync = new_sync.replace(
+    "try { document.cookie = 'printcost_firebase_config_backup=; Max-Age=0; Path=/; SameSite=Lax; Secure'; } catch (e) {}",
+    "/* Se conserva también la copia de respaldo en cookie. */"
+);
+new_sync = new_sync.replace(
+    "tx.objectStore('settings').delete('printcost_firebase_config');",
+    "/* No borrar la configuración persistida en IndexedDB. */"
+);
+
 TARGET.write_text(html, encoding="utf-8")
 print("Estado Firebase y persistencia de sesión actualizados correctamente.")
