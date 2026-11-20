@@ -610,5 +610,91 @@ if "signInAnonymously" not in html or "doc(SHARED_DOC)" not in html or "document
     raise SystemExit("La nueva sincronización anónima compartida no superó las comprobaciones; despliegue cancelado.")
 
 
+
+
+# PRINT COST PRO: dejar visible únicamente el panel de configuración JSON de Firebase.
+# Se ejecuta en el navegador porque el HTML principal se recupera desde Firebase Hosting
+# durante cada despliegue y la interfaz de ajustes forma parte de ese documento.
+cleanup_marker = 'id="printcost-minimal-firebase-settings-ui"'
+if cleanup_marker not in html:
+    html += r'''
+<script id="printcost-minimal-firebase-settings-ui">
+(function () {
+    const targetTitles = [
+        'Sincronizar mis datos entre dispositivos',
+        'Copia de Seguridad e Importación'
+    ];
+    const keepTitle = 'Configuración API de Firebase (JSON Completo)';
+    let scheduled = false;
+
+    function cleanText(value) {
+        return String(value || '').replace(/\\s+/g, ' ').trim();
+    }
+
+    function findTitle(title) {
+        const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,h6,[role="heading"]'));
+        return headings.find(el => cleanText(el.textContent) === title) || null;
+    }
+
+    function looksLikeCard(el) {
+        const classes = typeof el.className === 'string' ? el.className : '';
+        const rounded = /(?:^|\\s)rounded-(?:lg|xl|2xl)(?:\\s|$)/.test(classes);
+        const surface = /(?:^|\\s)bg-(?:white|slate-\\d+|gray-\\d+)(?:\\s|$)/.test(classes);
+        const edge = /(?:^|\\s)(?:border|shadow(?:-[\\w-]+)?)(?:\\s|$)/.test(classes);
+        return rounded && (surface || edge);
+    }
+
+    function findCard(heading, title) {
+        let node = heading.parentElement;
+        let fallback = heading.parentElement;
+        for (let depth = 0; node && node !== document.body && depth < 12; depth++, node = node.parentElement) {
+            const text = cleanText(node.textContent);
+            if (title === 'Copia de Seguridad e Importación' &&
+                text.includes('Exportar JSON') &&
+                text.includes('Importar JSON') &&
+                text.includes('Vaciar Datos')) {
+                return node;
+            }
+            if (looksLikeCard(node)) {
+                if (!text.includes(keepTitle)) return node;
+                return null;
+            }
+            if (node.matches && node.matches('section,article')) fallback = node;
+        }
+        if (fallback && fallback !== document.body &&
+            !cleanText(fallback.textContent).includes(keepTitle)) return fallback;
+        return null;
+    }
+
+    function removeUnwantedPanels() {
+        targetTitles.forEach(title => {
+            const heading = findTitle(title);
+            if (!heading) return;
+            const panel = findCard(heading, title);
+            if (panel && panel.isConnected &&
+                !cleanText(panel.textContent).includes(keepTitle)) {
+                panel.remove();
+            }
+        });
+    }
+
+    function scheduleCleanup() {
+        if (scheduled) return;
+        scheduled = true;
+        requestAnimationFrame(function () {
+            scheduled = false;
+            removeUnwantedPanels();
+        });
+    }
+
+    removeUnwantedPanels();
+    if (document.documentElement) {
+        const observer = new MutationObserver(scheduleCleanup);
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+    }
+})();
+</script>
+'''
+
 TARGET.write_text(html, encoding="utf-8")
 print("Estado Firebase y persistencia de sesión actualizados correctamente.")
