@@ -68,6 +68,7 @@ jobs:
             page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
             page.on('requestfailed',r=>failed.push(r.url()));
             page.on('response',r=>{if(r.status()>=400)bad.push({status:r.status(),url:r.url()})});
+            page.on('dialog',d=>d.accept());
             const response=await page.goto('http://127.0.0.1:8765/index.html',{waitUntil:'domcontentloaded'});
             await page.waitForTimeout(5000);
             const count=await page.evaluate(()=>JSON.parse(localStorage.getItem('printcost_printers')||'[]').length);
@@ -96,8 +97,77 @@ jobs:
             if(!await page.locator('#firebase-json-input').count())throw new Error('Falta configuración Firebase JSON');
             await page.locator('button[onclick="openAddPrinterModal()"]').first().click();
             if(!await page.locator('#printer-modal').evaluate(e=>!e.classList.contains('hidden')))throw new Error('No abre alta de impresora');
-            console.log('E2E_OK',{printers:count,catalogPages:cat.pages,navigation:views.length,consoleErrors,errors,failed,bad});
-            if(errors.length||consoleErrors.length||failed.length||bad.length)throw new Error('Errores navegador '+JSON.stringify({errors,consoleErrors,failed,bad}));
+            await page.locator('#modal-brand').fill('PrintCost QA');
+            await page.locator('#modal-model').fill('E2E 001');
+            await page.locator('#printer-form button[type="submit"]').click();
+            await page.waitForFunction(()=>JSON.parse(localStorage.getItem('printcost_printers')||'[]').length===37);
+            console.log('PRINTER_CREATE=OK');
+
+            await page.locator('#nav-manualCalc').click();
+            await page.locator('#calc-printer-select').selectOption({index:1});
+            await page.locator('button[onclick="openSaveQuoteModal()"]').click();
+            await page.locator('#quote-client-name').fill('Cliente de prueba E2E');
+            await page.locator('#quote-client-email').fill('e2e@example.invalid');
+            await page.locator('#save-quote-modal form').evaluate(form=>form.requestSubmit());
+            await page.waitForFunction(()=>JSON.parse(localStorage.getItem('printcost_quotes')||'[]').length===1);
+            console.log('QUOTE_CREATE=OK');
+
+            await page.locator('#nav-settings').click();
+            await page.waitForTimeout(500);
+            const backupPanel=await page.locator('#printcost-full-backup-tools').count();
+            if(!backupPanel)throw new Error('No aparece el panel de copia de seguridad');
+            const downloadPromise=page.waitForEvent('download');
+            await page.locator('#printcost-create-full-backup').click();
+            const backupDownload=await downloadPromise;
+            if(!backupDownload.suggestedFilename().endsWith('.json'))throw new Error('La copia no descarga un JSON');
+            console.log('FULL_BACKUP=OK '+backupDownload.suggestedFilename());
+
+            const clearButton=page.getByRole('button',{name:/Vaciar base de datos/i}).first();
+            if(await clearButton.count()){
+              await page.evaluate(()=>{window.__confirmCount=0;window.confirm=()=>++window.__confirmCount===1;});
+              await clearButton.click();
+              const confirms=await page.evaluate(()=>window.__confirmCount);
+              const afterCancel=await page.evaluate(()=>({printers:JSON.parse(localStorage.getItem('printcost_printers')||'[]').length,quotes:JSON.parse(localStorage.getItem('printcost_quotes')||'[]').length}));
+              if(confirms!==2||afterCancel.printers!==37||afterCancel.quotes!==1)throw new Error('La doble confirmación no funciona sin borrar datos de prueba');
+              console.log('DOUBLE_CONFIRMATION=OK');
+            }
+
+            const fakeConfig={apiKey:'AIzaSyDUMMY_NOT_VALID_FOR_E2E_TEST',authDomain:'printcostpro-e2e-invalid.firebaseapp.com',projectId:'printcostpro-e2e-invalid',storageBucket:'printcostpro-e2e-invalid.appspot.com',messagingSenderId:'1234567890',appId:'1:1234567890:web:e2etest'};
+            await page.locator('#firebase-json-input').fill(JSON.stringify(fakeConfig,null,2));
+            await page.locator('button[onclick="saveFirebaseSettings()"]').click();
+            await page.waitForTimeout(5000);
+            const savedConfig=await page.evaluate(async()=>{
+              const raw=localStorage.getItem('printcost_firebase_config');
+              let idb=null;
+              try{
+                idb=await new Promise(resolve=>{
+                  const req=indexedDB.open('printcostpro_settings_v1',1);
+                  req.onsuccess=()=>{const db=req.result;const tx=db.transaction('settings','readonly');const get=tx.objectStore('settings').get('printcost_firebase_config');get.onsuccess=()=>{const v=get.result||null;db.close();resolve(v)};get.onerror=()=>{db.close();resolve(null)}};
+                  req.onerror=()=>resolve(null);
+                });
+              }catch(e){}
+              return {raw,idb,cookie:document.cookie.includes('printcost_firebase_config_backup=')};
+            });
+            if(!savedConfig.raw||JSON.parse(savedConfig.raw).apiKey!==fakeConfig.apiKey)throw new Error('La API JSON no permanece guardada tras un error de conexión');
+            if(!savedConfig.idb||JSON.parse(savedConfig.idb).apiKey!==fakeConfig.apiKey)throw new Error('No se guardó la copia de configuración en IndexedDB');
+            console.log('FIREBASE_CONFIG_PERSISTENCE=OK '+JSON.stringify({indexedDB:!!savedConfig.idb,cookie:savedConfig.cookie}));
+
+            await page.reload({waitUntil:'domcontentloaded'});
+            await page.waitForTimeout(5000);
+            await page.locator('#app-unlock-password').fill(password);
+            await page.locator('#app-lock-screen button[type=submit]').click();
+            await page.waitForFunction(()=>document.getElementById('app-lock-screen').classList.contains('hidden'));
+            await page.locator('#nav-settings').click();
+            await page.waitForTimeout(700);
+            const restored=await page.locator('#firebase-json-input').inputValue();
+            if(!restored.includes(fakeConfig.apiKey))throw new Error('El JSON de Firebase no se restaura al abrir de nuevo la aplicación');
+            await page.locator('#nav-catalog').click();
+            if(!await page.locator('#view-catalog').evaluate(e=>!e.classList.contains('hidden')))throw new Error('La aplicación se bloqueó al fallar Firebase');
+            console.log('FIREBASE_ERROR_FALLBACK=OK');
+
+            const expectedBad=bad.filter(x=>!(x.status===400&&x.url.includes('identitytoolkit.googleapis.com')));
+            console.log('E2E_OK',{printers:count,catalogPages:cat.pages,navigation:views.length,consoleErrors,errors,failed,unexpectedBad:expectedBad});
+            if(errors.length||consoleErrors.length||failed.length||expectedBad.length)throw new Error('Errores navegador '+JSON.stringify({errors,consoleErrors,failed,unexpectedBad:expectedBad}));
             await browser.close();
           })().catch(e=>{console.error(e);process.exit(2)});
           JS
