@@ -293,7 +293,7 @@ new_sync = r'''/* ============================================================
         return d;
     })();
     let user = null, docRef = null, unsub = null, timer = null, lastHash = '', attached = false, busy = false;
-    let authUnsub = null, authTransition = false, enabled = false;
+    let authUnsub = null, authTransition = false, enabled = false, authRetryTimer = null, authRetryDelay = 1500, attachPromise = null;
 
     const $ = id => document.getElementById(id);
     const getMeta = () => { try { return JSON.parse(localStorage.getItem(META) || '{}') || {}; } catch (e) { return {}; } };
@@ -335,7 +335,8 @@ new_sync = r'''/* ============================================================
     function applyRemote(d) {
         let cur;
         try { cur = JSON.parse(d.payload); } catch (e) { status('Los datos de la nube no son válidos.', 'err'); return; }
-        const importedCatalogVersion = localStorage.getItem('printcost_bsd_nov_2026_catalog_v1');
+        const importedCatalogVersion = d.clearAll ? null : localStorage.getItem('printcost_bsd_nov_2026_catalog_v1');
+        if (d.clearAll) localStorage.removeItem('printcost_bsd_nov_2026_catalog_v1');
         if (importedCatalogVersion === '2026-11-v1') {
             let remotePrinters = [];
             try { remotePrinters = JSON.parse(cur['printcost_printers'] || '[]'); } catch (e) { remotePrinters = []; }
@@ -414,10 +415,17 @@ new_sync = r'''/* ============================================================
             authTransition = true;
             try {
                 const auth = firebase.auth();
-                if (firebase.auth.Auth && firebase.auth.Auth.Persistence) await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+                if (firebase.auth.Auth && firebase.auth.Auth.Persistence) {
+                    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+                }
                 await auth.signInAnonymously();
+                authRetryDelay = 1500;
             } catch (e) {
                 status('No se pudo autorizar este dispositivo: ' + friendly(e), 'err'); badge('error');
+                const code = (e && e.code) || '';
+                if (!['auth/operation-not-allowed', 'auth/invalid-api-key', 'auth/app-deleted'].includes(code)) {
+                    scheduleAuthRetry();
+                }
             } finally { authTransition = false; }
             return;
         }
@@ -461,15 +469,45 @@ new_sync = r'''/* ============================================================
         begin();
     }
 
-    function attach() {
-        if (!window.firebase || !firebase.apps || !firebase.apps.length || attached) return;
+    function scheduleAuthRetry() {
+        if (!enabled || authRetryTimer) return;
+        authRetryTimer = setTimeout(function () {
+            authRetryTimer = null;
+            if (!enabled) return;
+            const auth = firebase.auth();
+            if (auth.currentUser) onUser(auth.currentUser);
+            else onUser(null);
+        }, authRetryDelay);
+        authRetryDelay = Math.min(authRetryDelay * 2, 30000);
+    }
+
+    async function attach() {
+        if (!window.firebase || !firebase.apps || !firebase.apps.length || attached) return attachPromise;
         attached = true; enabled = true;
-        try { authUnsub = firebase.auth().onAuthStateChanged(onUser); }
-        catch (e) { status('Error de conexión: ' + friendly(e), 'err'); badge('error'); }
+        attachPromise = (async function () {
+            try {
+                const auth = firebase.auth();
+                if (firebase.auth.Auth && firebase.auth.Auth.Persistence) {
+                    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+                }
+                authUnsub = auth.onAuthStateChanged(onUser, function (e) {
+                    status('Error de autenticación Firebase: ' + friendly(e), 'err');
+                    badge('error');
+                    scheduleAuthRetry();
+                });
+            } catch (e) {
+                status('No se pudo restaurar la sesión Firebase: ' + friendly(e), 'err');
+                badge('error');
+                scheduleAuthRetry();
+            }
+        })();
+        return attachPromise;
     }
 
     function detach() {
         enabled = false; stop(); user = null; docRef = null;
+        if (authRetryTimer) { clearTimeout(authRetryTimer); authRetryTimer = null; }
+        attachPromise = null;
         if (authUnsub) { try { authUnsub(); } catch (e) {} authUnsub = null; }
         attached = false;
         if (window.firebase && firebase.apps && firebase.apps.length) {
@@ -483,7 +521,51 @@ new_sync = r'''/* ============================================================
         if (!user || !docRef) { status('Esperando la autorización automática de este dispositivo…', 'warn'); return; }
         await begin();
     };
-    window.__cloudSync = { attach: attach, detach: detach, push: push, snap: snap };
+    async function clearAll() {
+        const cfgSaved = !!localStorage.getItem('printcost_firebase_config');
+        if (cfgSaved && (!docRef || !user)) {
+            throw new Error('Firebase está configurado pero todavía no está conectado. Espera a que se sincronice y vuelve a intentarlo para borrar también la copia en la nube.');
+        }
+        KEYS.forEach(k => localStorage.removeItem(k));
+        localStorage.removeItem('printcost_bsd_nov_2026_catalog_v1');
+        const empty = {}; KEYS.forEach(k => { empty[k] = null; });
+        if (docRef && user) {
+            const ts = Date.now();
+            await docRef.set({ payload: JSON.stringify(empty), updatedAt: ts, deviceId: deviceId, v: 2, clearAll: true });
+            lastHash = hashOf(snap());
+            setMeta({ uid: 'shared', lastTs: ts, hash: lastHash });
+            status('Base de datos vaciada en este dispositivo y en los demás dispositivos conectados.', 'ok');
+            badge('synced');
+        } else {
+            lastHash = hashOf(snap());
+            localStorage.removeItem(META);
+            status('Datos locales vaciados. No hay una conexión Firebase activa.', 'ok');
+            badge('local');
+        }
+        try {
+            if (typeof quotes !== 'undefined') quotes = [];
+            if (typeof loadLocalPrinters === 'function') loadLocalPrinters();
+            if (typeof loadLocalQuotes === 'function') loadLocalQuotes();
+            if (typeof loadAuditFleet === 'function') loadAuditFleet();
+            if (typeof renderDashboard === 'function') renderDashboard();
+            if (typeof navigateTo === 'function') navigateTo(currentView, false);
+        } catch (e) { console.warn('No se pudo actualizar la pantalla tras vaciar la base de datos:', e); }
+        return true;
+    }
+
+    window.clearPrintCostDatabase = async function () {
+        if (!confirm('¿Estás seguro de que quieres vaciar la base de datos? Se eliminarán los catálogos, presupuestos, auditorías y ajustes de empresa.')) return false;
+        if (!confirm('SEGUNDA CONFIRMACIÓN: esta acción no se puede deshacer y también borrará los datos compartidos en Firebase para todos tus dispositivos. ¿Confirmas el vaciado?')) return false;
+        try {
+            await clearAll();
+            alert('La base de datos se ha vaciado correctamente.');
+            return true;
+        } catch (e) {
+            alert('No se ha podido vaciar la base de datos: ' + (e.message || e));
+            return false;
+        }
+    };
+    window.__cloudSync = { attach: attach, detach: detach, push: push, snap: snap, clearAll: clearAll };
 
     const _init = window.initFirebase;
     window.initFirebase = function () { _init.apply(this, arguments); attach(); };
@@ -618,11 +700,14 @@ if "signInAnonymously" not in html or "doc(SHARED_DOC)" not in html or "document
 cleanup_marker = 'id="printcost-minimal-firebase-settings-ui"'
 cleanup_script = r'''<script id="printcost-minimal-firebase-settings-ui">
 (function () {
-    const targetTitles = [
-        'Sincronizar mis datos entre dispositivos',
-        'Copia de Seguridad e Importación'
-    ];
-    const keepTitle = 'Configuración API de Firebase (JSON Completo)';
+    const syncTitle = 'Sincronizar mis datos entre dispositivos';
+    const backupTitle = 'Copia de Seguridad e Importación';
+    const excludedKeys = new Set([
+        'printcost_firebase_config',
+        'printcost_firebase_config_backup',
+        'printcost_cloud_meta',
+        'printcost_device_id'
+    ]);
     let scheduled = false;
 
     function cleanText(value) {
@@ -634,68 +719,145 @@ cleanup_script = r'''<script id="printcost-minimal-firebase-settings-ui">
         return headings.find(el => cleanText(el.textContent) === title) || null;
     }
 
-    function looksLikeCard(el) {
-        const classes = typeof el.className === 'string' ? el.className : '';
-        const rounded = /(?:^|\s)rounded-(?:lg|xl|2xl)(?:\s|$)/.test(classes);
-        const surface = /(?:^|\s)bg-(?:white|slate-\d+|gray-\d+)(?:\s|$)/.test(classes);
-        const edge = /(?:^|\s)(?:border|shadow(?:-[\w-]+)?)(?:\s|$)/.test(classes);
-        return rounded && (surface || edge);
-    }
-
-    function findCard(heading, title) {
-        let node = heading.parentElement;
-        let fallback = heading.parentElement;
+    function findCard(heading, expectedText) {
+        let node = heading && heading.parentElement;
         for (let depth = 0; node && node !== document.body && depth < 12; depth++, node = node.parentElement) {
             const text = cleanText(node.textContent);
-            if (title === 'Sincronizar mis datos entre dispositivos' &&
-                text.includes('Sincronizar ahora') &&
-                text.includes('Esperando la autorización automática') &&
-                text.includes('No necesitas crear una cuenta') &&
-                !text.includes(keepTitle)) {
-                return node;
+            if (text.includes(expectedText) && !text.includes('Configuración API de Firebase (JSON Completo)')) {
+                const classes = typeof node.className === 'string' ? node.className : '';
+                if (/(?:^|\s)rounded-(?:lg|xl|2xl)(?:\s|$)/.test(classes) ||
+                    (node.matches && node.matches('section,article'))) return node;
             }
-            if (title === 'Copia de Seguridad e Importación' &&
-                text.includes('Exportar JSON') &&
-                text.includes('Importar JSON') &&
-                text.includes('Vaciar Datos') &&
-                !text.includes(keepTitle)) {
-                return node;
-            }
-            if (looksLikeCard(node)) {
-                if (!text.includes(keepTitle)) return node;
-                return null;
-            }
-            if (node.matches && node.matches('section,article')) fallback = node;
         }
-        if (fallback && fallback !== document.body &&
-            !cleanText(fallback.textContent).includes(keepTitle)) return fallback;
-        return null;
+        return heading ? heading.parentElement : null;
     }
 
-    function removeUnwantedPanels() {
-        targetTitles.forEach(title => {
-            const heading = findTitle(title);
-            if (!heading) return;
-            const panel = findCard(heading, title);
-            if (panel && panel.isConnected &&
-                !cleanText(panel.textContent).includes(keepTitle)) {
-                panel.remove();
+    function hideSyncPanel() {
+        const heading = findTitle(syncTitle);
+        if (!heading) return;
+        const panel = findCard(heading, syncTitle);
+        if (panel && !panel.querySelector('#firebase-json-input')) {
+            panel.style.display = 'none';
+            panel.setAttribute('aria-hidden', 'true');
+        }
+    }
+
+    function downloadJson(filename, payload) {
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+    }
+
+    function makeFullBackup() {
+        const data = {};
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('printcost_') && !excludedKeys.has(key)) {
+                data[key] = localStorage.getItem(key);
             }
+        }
+        downloadJson('printcostpro-copia-seguridad-' + new Date().toISOString().slice(0, 10) + '.json', {
+            app: 'PrintCost Pro',
+            type: 'printcostpro-full-backup',
+            version: 1,
+            createdAt: new Date().toISOString(),
+            data: data
         });
+        alert('Copia de seguridad completa creada correctamente.');
     }
 
-    function scheduleCleanup() {
+    async function restoreFullBackup(file) {
+        try {
+            const raw = await file.text();
+            const backup = JSON.parse(raw);
+            if (!backup || backup.app !== 'PrintCost Pro' ||
+                backup.type !== 'printcostpro-full-backup' ||
+                !backup.data || typeof backup.data !== 'object' || Array.isArray(backup.data)) {
+                throw new Error('El archivo no es una copia de seguridad completa de PrintCost Pro.');
+            }
+            if (!confirm('Restaurar esta copia sustituirá los datos actuales de este dispositivo. ¿Deseas continuar?')) return;
+            Object.keys(backup.data).forEach(function (key) {
+                if (key.startsWith('printcost_') && !excludedKeys.has(key) && typeof backup.data[key] === 'string') {
+                    localStorage.setItem(key, backup.data[key]);
+                }
+            });
+            if (window.__cloudSync && window.__cloudSync.push) await window.__cloudSync.push(true);
+            alert('Copia de seguridad restaurada correctamente. Se actualizará la aplicación.');
+            location.reload();
+        } catch (e) {
+            alert('No se pudo restaurar la copia de seguridad: ' + (e.message || e));
+        }
+    }
+
+    function findVaciarButton() {
+        return Array.from(document.querySelectorAll('button')).find(function (button) {
+            return /^(Vaciar Datos|Vaciar base de datos)$/i.test(cleanText(button.textContent));
+        }) || null;
+    }
+
+    function setupBackupPanel() {
+        const heading = findTitle(backupTitle);
+        if (!heading) return;
+        const panel = findCard(heading, backupTitle) || heading.parentElement;
+        if (!panel) return;
+
+        let tools = panel.querySelector('#printcost-full-backup-tools');
+        if (!tools) {
+            tools = document.createElement('div');
+            tools.id = 'printcost-full-backup-tools';
+            tools.className = 'mt-3 mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3';
+            tools.innerHTML = '<p class="font-bold text-slate-800 mb-1">Copia de seguridad completa</p>' +
+                '<p class="text-xs text-slate-600 mb-3">Guarda catálogos, presupuestos, auditorías y ajustes de empresa en un archivo JSON. La configuración y la sesión de Firebase no se incluyen.</p>' +
+                '<div class="flex flex-wrap items-center gap-2">' +
+                '<button type="button" id="printcost-create-full-backup" class="bg-brand-600 hover:bg-brand-700 text-white font-bold px-4 py-2 rounded-lg text-xs">Hacer copia de seguridad</button>' +
+                '<label for="printcost-restore-full-backup" class="bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold px-4 py-2 rounded-lg text-xs cursor-pointer">Restaurar copia de seguridad</label>' +
+                '<input type="file" id="printcost-restore-full-backup" accept=".json,application/json" class="hidden">' +
+                '</div>';
+            heading.insertAdjacentElement('afterend', tools);
+            tools.querySelector('#printcost-create-full-backup').addEventListener('click', makeFullBackup);
+            tools.querySelector('#printcost-restore-full-backup').addEventListener('change', function (event) {
+                const file = event.target.files && event.target.files[0];
+                if (file) restoreFullBackup(file);
+                event.target.value = '';
+            });
+        }
+
+        const vaciar = findVaciarButton();
+        if (vaciar && !vaciar.dataset.printcostDoubleConfirm) {
+            vaciar.dataset.printcostDoubleConfirm = '1';
+            vaciar.textContent = 'Vaciar base de datos';
+            vaciar.setAttribute('onclick', 'return window.clearPrintCostDatabase()');
+            vaciar.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                window.clearPrintCostDatabase();
+            }, true);
+        }
+    }
+
+    function update() {
+        hideSyncPanel();
+        setupBackupPanel();
+    }
+
+    function schedule() {
         if (scheduled) return;
         scheduled = true;
         requestAnimationFrame(function () {
             scheduled = false;
-            removeUnwantedPanels();
+            update();
         });
     }
 
-    removeUnwantedPanels();
+    update();
     if (document.documentElement) {
-        const observer = new MutationObserver(scheduleCleanup);
+        const observer = new MutationObserver(schedule);
         observer.observe(document.documentElement, { childList: true, subtree: true });
     }
 })();
@@ -706,10 +868,91 @@ if cleanup_marker in html:
     script_start = html.find(script_tag)
     script_end = html.find('</script>', script_start)
     if script_start < 0 or script_end < 0:
-        raise SystemExit("El script de limpieza anterior está incompleto; despliegue cancelado.")
+        raise SystemExit("El script de ajustes anterior está incompleto; despliegue cancelado.")
     html = html[:script_start] + cleanup_script + html[script_end + len('</script>'):]
 else:
     html += '\n' + cleanup_script + '\n'
+
+# PRINT COST PRO: restaurar automáticamente la configuración guardada al abrir.
+firebase_bootstrap = r'''<script id="printcost-firebase-config-autorestore">
+(function () {
+    if (window.__printcostFirebaseAutoRestoreInstalled) return;
+    window.__printcostFirebaseAutoRestoreInstalled = true;
+    let started = false;
+
+    async function restoreWhenReady() {
+        if (started) return;
+        started = true;
+        try {
+            for (let attempt = 0; attempt < 60; attempt++) {
+                if (window.firebase && firebase.apps &&
+                    typeof window.loadFirebaseSettings === 'function' &&
+                    typeof window.initFirebase === 'function') break;
+                await new Promise(resolve => setTimeout(resolve, 250));
+            }
+            if (!window.firebase || !firebase.apps ||
+                typeof window.loadFirebaseSettings !== 'function' ||
+                typeof window.initFirebase !== 'function') {
+                throw new Error('No se pudo cargar el módulo Firebase. Recarga la aplicación.');
+            }
+
+            if (firebase.apps.length) {
+                if (window.__cloudSync && typeof window.__cloudSync.attach === 'function') {
+                    await window.__cloudSync.attach();
+                }
+                return;
+            }
+
+            let hasSavedConfig = false;
+            try { hasSavedConfig = !!localStorage.getItem('printcost_firebase_config'); } catch (e) {}
+            try { hasSavedConfig = hasSavedConfig || document.cookie.includes('printcost_firebase_config_backup='); } catch (e) {}
+            if (!hasSavedConfig) {
+                try {
+                    const request = indexedDB.open('printcostpro_settings_v1', 1);
+                    hasSavedConfig = await new Promise((resolve, reject) => {
+                        request.onupgradeneeded = () => {
+                            const db = request.result;
+                            if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings');
+                        };
+                        request.onsuccess = () => {
+                            const db = request.result;
+                            const tx = db.transaction('settings', 'readonly');
+                            const get = tx.objectStore('settings').get('printcost_firebase_config');
+                            get.onsuccess = () => { const value = !!get.result; db.close(); resolve(value); };
+                            get.onerror = () => { const error = get.error; db.close(); reject(error); };
+                        };
+                        request.onerror = () => reject(request.error);
+                    });
+                } catch (e) {}
+            }
+            if (!hasSavedConfig) return;
+
+            await window.loadFirebaseSettings();
+            if (window.__cloudSync && typeof window.__cloudSync.attach === 'function' &&
+                firebase.apps && firebase.apps.length) {
+                await window.__cloudSync.attach();
+            }
+        } catch (e) {
+            console.error('No se pudo restaurar la configuración Firebase guardada:', e);
+            const status = document.getElementById('cloud-sync-status');
+            if (status) status.textContent = 'La configuración sigue guardada, pero no se pudo iniciar Firebase: ' + (e.message || e);
+        }
+    }
+
+    function launch() { setTimeout(restoreWhenReady, 300); }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', launch, { once: true });
+    } else launch();
+    window.addEventListener('pageshow', function () {
+        if (window.firebase && firebase.apps && firebase.apps.length && window.__cloudSync) {
+            window.__cloudSync.attach();
+        }
+    });
+})();
+</script>'''
+if 'id="printcost-firebase-config-autorestore"' not in html:
+    html += '\n' + firebase_bootstrap + '\n'
+
 
 TARGET.write_text(html, encoding="utf-8")
 print("Estado Firebase y persistencia de sesión actualizados correctamente.")
