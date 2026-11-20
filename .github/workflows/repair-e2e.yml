@@ -101,4 +101,4 @@ jobs:
             await browser.close();
           })().catch(e=>{console.error(e);process.exit(2)});
           JS
-          node /tmp/e2e.cjs
+          NODE_PATH="$PWD/node_modules" node /tmp/e2e.cjs
