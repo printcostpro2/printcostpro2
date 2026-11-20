@@ -431,7 +431,18 @@ new_sync = r'''/* ============================================================
                 const sharedRef = db.collection('printcost').doc(SHARED_DOC);
                 const legacy = await legacyRef.get();
                 const shared = await sharedRef.get();
-                if (legacy.exists && !shared.exists) await sharedRef.set(legacy.data());
+                if (legacy.exists && !shared.exists) {
+                    await sharedRef.set(legacy.data());
+                    try {
+                        const legacyPayload = JSON.parse(legacy.data().payload || '{}');
+                        const localHash = hashOf(snap());
+                        if (hashOf(legacyPayload) === localHash) {
+                            setMeta({ uid: 'shared', lastTs: legacy.data().updatedAt || Date.now(), hash: localHash });
+                        }
+                    } catch (migrationMetaError) {
+                        console.warn('No se pudo comparar el estado local durante la migración:', migrationMetaError);
+                    }
+                }
                 await firebase.auth().signOut();
                 await firebase.auth().signInAnonymously();
             } catch (e) {
@@ -550,7 +561,7 @@ service cloud.firestore {
   }
 }</pre>
                         <p class="mt-2">Pega el JSON en este panel y pulsa «Guardar y Conectar Firebase». La aplicación autorizará este dispositivo automáticamente.</p>
-                        <p class="mt-2 text-amber-700 font-semibold">Importante: las reglas permiten el acceso anónimo al documento compartido de este proyecto. No compartas la configuración de tu Firebase con personas ajenas a tus dispositivos.</p>
+                        <p class="mt-2 text-amber-700 font-semibold">Importante: cualquier sesión autenticada en este proyecto puede acceder al documento compartido. Para reforzar la protección, configura también Firebase App Check.</p>
                     </details>'''
 if old_ui not in html:
     raise SystemExit("No se encontró el panel de sincronización antiguo esperado; despliegue cancelado.")
