@@ -95,25 +95,7 @@ jobs:
           done
           if [ "$failed" -ne 0 ]; then
             npm install --no-save acorn@8 >/dev/null
-            node - <<'SCAN'
-            const fs=require("fs"), acorn=require("acorn");
-            const code=fs.readFileSync("diagnostic/inline-007.js","utf8");
-            const tok=acorn.tokenizer(code,{ecmaVersion:"latest",locations:true});
-            const stack=[]; const opens={"(":")","[":"]","{":"}"};
-            try {
-              for (;;) {
-                const t=tok.getToken(); const label=t.type.label;
-                if (opens[label]) stack.push({open:label,close:opens[label],line:t.loc.start.line,column:t.loc.start.column});
-                else if ([")","]","}"].includes(label)) {
-                  const top=stack[stack.length-1];
-                  if (top && top.close===label) stack.pop();
-                  else console.log("UNMATCHED_CLOSE",label,t.loc.start);
-                }
-                if (label==="eof") break;
-              }
-              console.log("UNCLOSED_TOKENS="+JSON.stringify(stack.slice(-50)));
-            } catch(e) { console.log("TOKENIZER_ERROR="+e.message, e.loc); console.log("UNCLOSED_TOKENS="+JSON.stringify(stack.slice(-50))); }
-            SCAN
+            node diagnostic/scan.js
           fi
           if [ "$failed" -ne 0 ]; then exit 1; fi
           echo "All inline JavaScript scripts passed node --check."
