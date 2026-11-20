@@ -16,43 +16,56 @@ concurrency:
 
 jobs:
   build_and_deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Recover the currently published application
+      - name: Validate the tracked application source (no live-file patching)
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p y
-          curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
-            "https://printcostpro2-b0737.web.app/index.html" \
-            --output y/index.html
           test -s y/index.html
-          test "$(wc -c < y/index.html)" -ge 100000
-          grep -q "app-unlock-password" y/index.html
-          echo "Current application recovered and password screen verified."
-
-      - name: Configure persistent Firebase and shared anonymous synchronization
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -m py_compile .github/scripts/patch_firebase_config_persistence.py
-          python3 .github/scripts/patch_firebase_config_persistence.py
-          grep -q "PRINTCOST PRO: persistencia redundante" y/index.html
-          grep -q "printcost_firebase_config_backup" y/index.html
-          grep -q "printcostpro_settings_v1" y/index.html
-          grep -q "signInAnonymously" y/index.html
-          grep -q "doc(SHARED_DOC)" y/index.html
+          test "$(wc -c < y/index.html)" -gt 600000
+          grep -q 'printcost-shared-anonymous-sync' y/index.html
+          grep -q 'signInAnonymously' y/index.html
           grep -q "documentId == 'shared'" y/index.html
+          grep -q 'printcost-minimal-firebase-settings-ui' y/index.html
+          grep -q 'printcost-firebase-config-autorestore' y/index.html
           if grep -q 'id="cloud-email"' y/index.html || grep -q 'id="cloud-password"' y/index.html; then
-            echo "Obsolete shared email/password login fields remain in the app."
+            echo "Obsolete email/password sync controls found."
             exit 1
           fi
-          echo "Firebase config persistence and shared anonymous per-device sync verified."
+          test "$(grep -o '"id":"bsd2026-' y/index.html | wc -l)" -eq 36
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          class Extract(HTMLParser):
+              def __init__(self):
+                  super().__init__(convert_charrefs=False)
+                  self.scripts=[]; self.current=None
+              def handle_starttag(self, tag, attrs):
+                  if tag.lower()=="script":
+                      self.current={"attrs":dict(attrs),"parts":[]}
+              def handle_data(self, data):
+                  if self.current is not None: self.current["parts"].append(data)
+              def handle_endtag(self, tag):
+                  if tag.lower()=="script" and self.current is not None:
+                      self.scripts.append(self.current); self.current=None
+          parser=Extract(); parser.feed(Path("y/index.html").read_text(encoding="utf-8"))
+          count=0
+          for i, script in enumerate(parser.scripts):
+              attrs=script["attrs"]; kind=(attrs.get("type") or "").lower()
+              if attrs.get("src") or kind in ("application/json","application/ld+json","importmap"): continue
+              Path(f"/tmp/printcost-{i:03}.js").write_text("".join(script["parts"]),encoding="utf-8")
+              count+=1
+          print(f"Inline JavaScript blocks: {count}")
+          if count < 4: raise SystemExit("Unexpectedly few application scripts.")
+          PY
+          for f in /tmp/printcost-*.js; do node --check "$f"; done
+          echo "Source verified: 36 printers, anonymous shared sync and all inline JS syntax valid."
 
-      - name: Add the updated privacy policy
+      - name: Add the current privacy policy
         shell: bash
         run: |
           set -euo pipefail
@@ -60,12 +73,71 @@ jobs:
           cp politica_privacidad.html y/politica-privacidad.html
           grep -qi "PrintCost Pro" y/politica-privacidad.html
           grep -qi "Firebase" y/politica-privacidad.html
-          echo "Privacy page ready at /politica-privacidad.html."
 
-      - name: Deploy to Firebase Hosting
+      - name: Deploy the tracked source to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRINTCOSTPRO2_B0737 }}
           channelId: live
           projectId: printcostpro2-b0737
+
+      - name: Install Chromium for post-deploy smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm init -y >/dev/null
+          npm install --no-save playwright@1.56.0
+          npx playwright install --with-deps chromium
+
+      - name: Verify the published application in a real browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/printcost-live-smoke.cjs <<'JS'
+          const {chromium}=require('playwright');
+          const crypto=require('crypto');
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            const context=await browser.newContext({viewport:{width:1600,height:1100}});
+            const page=await context.newPage();
+            const pass='PrintCost-Live-Smoke-2026', salt='live-smoke-test';
+            const hash=crypto.createHash('sha256').update(salt+':'+pass).digest('hex');
+            await page.addInitScript(({salt,hash})=>localStorage.setItem('printcost_app_access_v1',JSON.stringify({salt,hash,version:1})),{salt,hash});
+            const errors=[],consoleErrors=[],failed=[],bad=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+            page.on('requestfailed',r=>failed.push(r.url()));
+            page.on('response',r=>{if(r.status()>=400)bad.push({status:r.status(),url:r.url()})});
+            const response=await page.goto('https://printcostpro2-b0737.web.app/?smoke='+Date.now(),{waitUntil:'domcontentloaded',timeout:60000});
+            await page.waitForTimeout(6000);
+            if(response.status()!==200)throw new Error('HTTP '+response.status());
+            await page.locator('#app-unlock-password').fill(pass);
+            await page.locator('#app-lock-screen button[type=submit]').click();
+            await page.waitForFunction(()=>document.getElementById('app-lock-screen').classList.contains('hidden'));
+            const printers=await page.evaluate(()=>JSON.parse(localStorage.getItem('printcost_printers')||'[]').length);
+            if(printers!==36)throw new Error('Se cargaron '+printers+' impresoras, se esperaban 36');
+            const views=[['dashboard','nav-dashboard'],['catalog','nav-catalog'],['comparator','nav-comparator'],['quotes','nav-quotes'],['consumables','nav-consumables'],['top10','nav-top10'],['manualCalc','nav-manualCalc'],['tcoSim','nav-tcoSim'],['settings','nav-settings']];
+            for(const [view,nav] of views){
+              await page.locator('#'+nav).click();
+              if(!await page.locator('#view-'+view).evaluate(e=>!e.classList.contains('hidden')))throw new Error('No abre '+view);
+            }
+            await page.locator('#nav-catalog').click();
+            const pages=await page.locator('#catalog-pagination button').count();
+            if(pages!==6||await page.locator('#catalog-grid>*').count()!==6)throw new Error('Catálogo/paginación incorrectos');
+            await page.locator('#catalog-pagination button').nth(1).click();
+            await page.locator('#nav-comparator').click();
+            if(await page.locator('#comp-select-0 option').count()<37)throw new Error('Comparador incompleto');
+            await page.locator('#nav-manualCalc').click();
+            if(await page.locator('#calc-printer-select option').count()<37)throw new Error('Calculadora incompleta');
+            await page.locator('#nav-settings').click();
+            if(!await page.locator('#firebase-json-input').count())throw new Error('Falta configuración de Firebase');
+            await page.locator('button[onclick="openAddPrinterModal()"]').first().click();
+            if(!await page.locator('#printer-modal').evaluate(e=>!e.classList.contains('hidden')))throw new Error('No abre alta de impresora');
+            await page.locator('#printer-modal button[onclick="closeAddPrinterModal()"]').click();
+            console.log('LIVE_SMOKE_OK',{printers,pages,navigation:views.length,errors,consoleErrors,failed,bad});
+            if(errors.length||consoleErrors.length||failed.length||bad.length)throw new Error('Errores en navegador '+JSON.stringify({errors,consoleErrors,failed,bad}));
+            await browser.close();
+          })().catch(e=>{console.error('LIVE_SMOKE_FAILED',e);process.exit(2)});
+          JS
+          NODE_PATH="$PWD/node_modules" node /tmp/printcost-live-smoke.cjs
