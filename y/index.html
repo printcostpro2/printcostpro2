@@ -5119,6 +5119,28 @@ service cloud.firestore {
         return c ? c + ': ' + message : message;
     }
 
+    function isInvalidApiKey(e) {
+        const code = String((e && e.code) || '').toLowerCase();
+        const message = String((e && e.message) || e || '').toLowerCase();
+        return code.includes('api-key-not-valid') || code.includes('invalid-api-key') ||
+            message.includes('api-key-not-valid') || message.includes('api key not valid') ||
+            message.includes('please pass a valid api key');
+    }
+
+    function returnToLocalMode(error) {
+        enabled = false;
+        stop();
+        user = null; docRef = null; attached = false; attachPromise = null;
+        if (authRetryTimer) { clearTimeout(authRetryTimer); authRetryTimer = null; }
+        if (syncRetryTimer) { clearTimeout(syncRetryTimer); syncRetryTimer = null; }
+        if (authUnsub) { try { authUnsub(); } catch (e) {} authUnsub = null; }
+        const account = $('cloud-sync-account');
+        if (account) account.textContent = '';
+        badge('local');
+        status('Modo local activado. Firebase no ha aceptado la clave API. La configuración se conserva en este dispositivo; revisa el JSON en Ajustes. Los datos locales siguen disponibles.', 'warn');
+        console.warn('PrintCost Pro permanece en modo local porque Firebase rechazó la clave API:', error);
+    }
+
     function stop() {
         if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
         if (timer) { clearInterval(timer); timer = null; }
@@ -5172,7 +5194,10 @@ service cloud.firestore {
             await docRef.set({ payload: payload, updatedAt: ts, deviceId: deviceId, v: 2 });
             lastHash = h; setMeta({ uid: 'shared', lastTs: ts, hash: h });
             status('Sincronizado a las ' + clock(), 'ok'); badge('synced');
-        } catch (e) { status('Error al sincronizar: ' + friendly(e), 'err'); badge('error', friendly(e)); scheduleSyncRetry(e); }
+        } catch (e) {
+            if (isInvalidApiKey(e)) returnToLocalMode(e);
+            else { status('Error al sincronizar: ' + friendly(e), 'err'); badge('error', friendly(e)); scheduleSyncRetry(e); }
+        }
         finally { busy = false; }
     }
 
@@ -5202,6 +5227,7 @@ service cloud.firestore {
                 await push(true);
             }
         } catch (e) {
+            if (isInvalidApiKey(e)) { returnToLocalMode(e); return; }
             status('Error al conectar con los datos compartidos: ' + friendly(e), 'err');
             badge('error', friendly(e));
             scheduleSyncRetry(e);
@@ -5214,6 +5240,7 @@ service cloud.firestore {
             if (d.deviceId === deviceId || (d.updatedAt || 0) <= (m.lastTs || 0)) return;
             applyRemote(d);
         }, function (e) {
+            if (isInvalidApiKey(e)) { returnToLocalMode(e); return; }
             const detail = friendly(e);
             status('Error de conexión con Firestore: ' + detail, 'err');
             badge('error', detail);
@@ -5237,6 +5264,7 @@ service cloud.firestore {
                 await auth.signInAnonymously();
                 authRetryDelay = 1500;
             } catch (e) {
+                if (isInvalidApiKey(e)) { returnToLocalMode(e); return; }
                 status('No se pudo autorizar este dispositivo: ' + friendly(e), 'err'); badge('error', friendly(e));
                 const code = (e && e.code) || '';
                 if (!['auth/operation-not-allowed', 'auth/invalid-api-key', 'auth/app-deleted'].includes(code)) {
@@ -5308,11 +5336,13 @@ service cloud.firestore {
                     catch (persistenceError) { console.warn('No se pudo fijar persistencia LOCAL; se usará la configuración predeterminada.', persistenceError); }
                 }
                 authUnsub = auth.onAuthStateChanged(onUser, function (e) {
+                    if (isInvalidApiKey(e)) { returnToLocalMode(e); return; }
                     status('Error de autenticación Firebase: ' + friendly(e), 'err');
                     badge('error', friendly(e));
                     scheduleAuthRetry();
                 });
             } catch (e) {
+                if (isInvalidApiKey(e)) { returnToLocalMode(e); return; }
                 status('No se pudo restaurar la sesión Firebase: ' + friendly(e), 'err');
                 badge('error', friendly(e));
                 scheduleAuthRetry();
