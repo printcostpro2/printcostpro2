@@ -6,9 +6,9 @@ if not TARGET.is_file():
 
 html = TARGET.read_text(encoding="utf-8")
 marker = "/* PRINTCOST PRO: persistencia redundante de la configuración Firebase */"
-if marker in html:
-    print("La persistencia reforzada ya está instalada.")
-    raise SystemExit(0)
+already_patched = marker in html
+if already_patched:
+    print("La persistencia de la API ya estaba instalada; se aplicarán los ajustes de estado y sesión.")
 
 old = '''        function loadFirebaseSettings() {
             const saved = localStorage.getItem('printcost_firebase_config');
@@ -219,8 +219,48 @@ new = r'''        /* PRINTCOST PRO: persistencia redundante de la configuración
         }
 '''
 
-if old not in html:
-    raise SystemExit("No coincide el bloque de configuración Firebase esperado; se cancela el despliegue para no alterar una versión distinta.")
+if not already_patched:
+    if old not in html:
+        raise SystemExit("No coincide el bloque de configuración Firebase esperado; se cancela el despliegue para no alterar una versión distinta.")
+    html = html.replace(old, new, 1)
 
-TARGET.write_text(html.replace(old, new, 1), encoding="utf-8")
-print("Persistencia reforzada aplicada correctamente a y/index.html")
+# Mostrar claramente que Firebase está conectado aunque aún no haya una cuenta iniciada.
+badge_old = "connected: [amber, 'fa-cloud', 'Firebase: sin sesión'],"
+badge_new = "connected: [amber, 'fa-cloud', 'Firebase conectado · Sin iniciar sesión'],"
+if badge_old in html:
+    html = html.replace(badge_old, badge_new, 1)
+elif badge_new not in html:
+    raise SystemExit("No se encontró el indicador de estado esperado; despliegue cancelado.")
+
+# Traducir también el nuevo texto de estado al inglés.
+dict_old = '"Firebase: sin sesión": "Firebase: signed out"'
+dict_new = '"Firebase conectado · Sin iniciar sesión": "Firebase connected · Not signed in"'
+if dict_old in html:
+    html = html.replace(dict_old, dict_new, 1)
+elif dict_new not in html:
+    raise SystemExit("No se encontró la traducción del indicador; despliegue cancelado.")
+
+# Fijar expresamente la persistencia LOCAL de Firebase Authentication antes de iniciar/crear sesión.
+auth_old = """        try {
+            status('Conectando…');
+            if (kind === 'up') await firebase.auth().createUserWithEmailAndPassword(email, pass);
+            else await firebase.auth().signInWithEmailAndPassword(email, pass);"""
+auth_new = """        try {
+            status('Conectando…');
+            try {
+                const auth = firebase.auth();
+                if (firebase.auth.Auth && firebase.auth.Auth.Persistence) {
+                    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+                }
+            } catch (persistError) {
+                console.warn('No se pudo fijar la persistencia local de Firebase Authentication:', persistError);
+            }
+            if (kind === 'up') await firebase.auth().createUserWithEmailAndPassword(email, pass);
+            else await firebase.auth().signInWithEmailAndPassword(email, pass);"""
+if auth_old in html:
+    html = html.replace(auth_old, auth_new, 1)
+elif auth_new not in html:
+    raise SystemExit("No se encontró la función de inicio de sesión esperada; despliegue cancelado.")
+
+TARGET.write_text(html, encoding="utf-8")
+print("Estado Firebase y persistencia de sesión actualizados correctamente.")
