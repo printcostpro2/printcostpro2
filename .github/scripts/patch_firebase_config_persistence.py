@@ -616,9 +616,7 @@ if "signInAnonymously" not in html or "doc(SHARED_DOC)" not in html or "document
 # Se ejecuta en el navegador porque el HTML principal se recupera desde Firebase Hosting
 # durante cada despliegue y la interfaz de ajustes forma parte de ese documento.
 cleanup_marker = 'id="printcost-minimal-firebase-settings-ui"'
-if cleanup_marker not in html:
-    html += r'''
-<script id="printcost-minimal-firebase-settings-ui">
+cleanup_script = r'''<script id="printcost-minimal-firebase-settings-ui">
 (function () {
     const targetTitles = [
         'Sincronizar mis datos entre dispositivos',
@@ -701,8 +699,17 @@ if cleanup_marker not in html:
         observer.observe(document.documentElement, { childList: true, subtree: true });
     }
 })();
-</script>
-'''
+</script>'''
+cleanup_script = cleanup_script.strip()
+if cleanup_marker in html:
+    script_tag = '<script id="printcost-minimal-firebase-settings-ui">'
+    script_start = html.find(script_tag)
+    script_end = html.find('</script>', script_start)
+    if script_start < 0 or script_end < 0:
+        raise SystemExit("El script de limpieza anterior está incompleto; despliegue cancelado.")
+    html = html[:script_start] + cleanup_script + html[script_end + len('</script>'):]
+else:
+    html += '\\n' + cleanup_script + '\\n'
 
 TARGET.write_text(html, encoding="utf-8")
 print("Estado Firebase y persistencia de sesión actualizados correctamente.")
