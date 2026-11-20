@@ -1,0 +1,29 @@
+name: Restore previous working PrintCost Pro Hosting version
+
+on:
+  push:
+    branches:
+      - recovery-restore-20261120
+
+permissions:
+  contents: read
+
+jobs:
+  restore-live:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restore the last known working Hosting version
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRINTCOSTPRO2_B0737 }}
+        run: |
+          set -euo pipefail
+          test -n "$FIREBASE_SERVICE_ACCOUNT_JSON"
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/firebase-service-account.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebase-service-account.json"
+          npx --yes firebase-tools@15.37.0 hosting:clone \
+            printcostpro2-b0737@ae54280a1e08745d \
+            printcostpro2-b0737:live \
+            --project printcostpro2-b0737 \
+            --non-interactive
+          echo "Restored Hosting version ae54280a1e08745d to the live channel."
