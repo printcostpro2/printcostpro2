@@ -38,6 +38,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 -m py_compile .github/scripts/patch_firebase_config_persistence.py
           python3 .github/scripts/patch_firebase_config_persistence.py
           grep -q "PRINTCOST PRO: persistencia redundante" y/index.html
           grep -q "printcost_firebase_config_backup" y/index.html
