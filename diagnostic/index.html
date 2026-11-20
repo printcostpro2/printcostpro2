@@ -1301,37 +1301,43 @@
 
                 <div class="border-t border-slate-100 pt-4 space-y-3">
                     <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2"><i class="fa-solid fa-cloud-arrow-up text-brand-600"></i> Sincronizar mis datos entre dispositivos</h3>
-                    <p class="text-xs text-slate-500">No necesitas crear una cuenta ni compartir contraseñas. Cada dispositivo se autoriza automáticamente y todos sincronizan los mismos datos del proyecto Firebase.</p>
+                    <p class="text-xs text-slate-500">Después de conectar Firebase, inicia sesión (o crea una cuenta) con tu email y contraseña. Usa la misma cuenta en cada dispositivo y tu catálogo, presupuestos y auditorías se mantendrán sincronizados.</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block font-semibold text-slate-700 text-xs mb-1">Email de la cuenta</label>
+                            <input type="email" id="cloud-email" autocomplete="username" class="w-full text-xs border border-slate-300 rounded-lg p-2">
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-700 text-xs mb-1">Contraseña</label>
+                            <input type="password" id="cloud-password" autocomplete="current-password" class="w-full text-xs border border-slate-300 rounded-lg p-2">
+                        </div>
+                    </div>
                     <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="cloudSignIn()" class="bg-brand-600 hover:bg-brand-700 text-white font-bold px-4 py-2.5 rounded-lg text-xs shadow flex items-center gap-2"><i class="fa-solid fa-right-to-bracket"></i> Iniciar sesión</button>
+                        <button onclick="cloudSignUp()" class="bg-slate-800 hover:bg-slate-700 text-white font-bold px-4 py-2.5 rounded-lg text-xs shadow flex items-center gap-2"><i class="fa-solid fa-user-plus"></i> Crear cuenta</button>
                         <button onclick="cloudSyncNow()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-lg text-xs shadow flex items-center gap-2"><i class="fa-solid fa-rotate"></i> Sincronizar ahora</button>
+                        <button onclick="cloudSignOut()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-2.5 rounded-lg text-xs">Cerrar sesión</button>
                     </div>
                     <p id="cloud-sync-account" class="text-xs font-semibold text-slate-700"></p>
-                    <p id="cloud-sync-status" class="text-xs font-semibold text-slate-500">Esperando la autorización automática de este dispositivo…</p>
+                    <p id="cloud-sync-status" class="text-xs font-semibold text-slate-500">Aún no has iniciado sesión.</p>
 
                     <details class="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg p-3">
                         <summary class="cursor-pointer font-semibold text-slate-700">Cómo configurar tu proyecto de Firebase</summary>
                         <ol class="list-decimal pl-5 mt-2 space-y-1.5">
                             <li>Crea un proyecto en console.firebase.google.com y añade una app web para obtener el bloque JSON de configuración.</li>
-                            <li>En Authentication &gt; Método de acceso, activa «Anónimo».</li>
-                            <li>En Firestore Database, crea la base de datos y sustituye las reglas por estas:</li>
+                            <li>En Authentication, activa el método «Correo electrónico/contraseña».</li>
+                            <li>En Firestore Database, crea la base de datos y pega estas reglas de seguridad:</li>
                         </ol>
                         <pre class="mt-2 bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto text-[11px] leading-relaxed">rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /printcost/{documentId} {
+    match /printcost/{uid} {
       allow read, write: if request.auth != null
-        && (
-          (documentId == 'shared')
-          ||
-          (documentId != 'shared'
-            && request.auth.uid == documentId
-            && request.auth.token.firebase.sign_in_provider == 'password')
-        );
+                         && request.auth.uid == uid;
     }
   }
 }</pre>
-                        <p class="mt-2">Pega el JSON en este panel y pulsa «Guardar y Conectar Firebase». La aplicación autorizará este dispositivo automáticamente.</p>
-                        <p class="mt-2 text-amber-700 font-semibold">Importante: cualquier sesión autenticada en este proyecto puede acceder al documento compartido. Para reforzar la protección, configura también Firebase App Check.</p>
+                        <p class="mt-2">Pega el JSON en este panel, pulsa «Guardar y Conectar Firebase» e inicia sesión.</p>
                     </details>
                 </div>
             </div>
@@ -2633,7 +2639,7 @@ service cloud.firestore {
                 }
                 await persistFirebaseConfig(cfg);
                 initFirebase(cfg);
-                alert('Configuración guardada permanentemente en este dispositivo. Comprobando la conexión con Firebase…');
+                alert('¡Configuración de Firebase guardada y conectada correctamente!');
             } catch (e) {
                 if (e instanceof SyntaxError) alert('El texto introducido no es un objeto JSON válido.');
                 else alert('No se pudo guardar la configuración de forma permanente: ' + (e.message || e));
@@ -5056,24 +5062,26 @@ service cloud.firestore {
                 renderCatalog();
                 renderDashboard();
                 renderAuditTool();
-            /* ============================================================
-   SINCRONIZACIÓN EN LA NUBE (Firebase Authentication anónima + Firestore)
-   Cada dispositivo obtiene su propia identidad anónima automáticamente.
-   Todos los dispositivos de un mismo proyecto usan printcost/shared.
+            }
+        }
+    </script>
+<script>
+/* ============================================================
+   SINCRONIZACIÓN EN LA NUBE (Firebase Authentication + Firestore)
+   Guarda catálogo, presupuestos, auditorías y ajustes de PDF/email
+   en el proyecto de Firebase del usuario, para usarlos en varios
+   dispositivos con la misma cuenta.
    ============================================================ */
 (function () {
     const KEYS = ['printcost_printers', 'printcost_quotes', 'printcost_audit_fleet', 'printcost_company_settings'];
     const META = 'printcost_cloud_meta';
     const MAX_CHARS = 900000;
-    const SHARED_DOC = 'shared';
     const deviceId = (function () {
         let d = localStorage.getItem('printcost_device_id');
         if (!d) { d = 'd' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); localStorage.setItem('printcost_device_id', d); }
         return d;
     })();
     let user = null, docRef = null, unsub = null, timer = null, lastHash = '', attached = false, busy = false;
-    let authUnsub = null, authTransition = false, enabled = false, authRetryTimer = null, authRetryDelay = 1500, attachPromise = null;
-    let syncRetryTimer = null, syncRetryDelay = 2000;
 
     const $ = id => document.getElementById(id);
     const getMeta = () => { try { return JSON.parse(localStorage.getItem(META) || '{}') || {}; } catch (e) { return {}; } };
@@ -5087,97 +5095,59 @@ service cloud.firestore {
         el.textContent = msg;
         el.className = 'text-xs font-semibold ' + ({ ok: 'text-emerald-600', err: 'text-rose-600', warn: 'text-amber-600' }[kind] || 'text-slate-500');
     }
-    function badge(state, detail) {
+    function badge(state) {
         const b = $('firebase-sync-badge'); if (!b) return;
         const amber = 'bg-amber-100 text-amber-800 border border-amber-300', green = 'bg-emerald-100 text-emerald-800 border border-emerald-300', red = 'bg-rose-100 text-rose-800 border border-rose-300';
         const base = ' text-[11px] px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1.5';
         const map = {
             local: [amber, 'fa-database', 'LocalStorage'],
-            connected: [amber, 'fa-cloud', 'Firebase conectado · Preparando sincronización'],
+            connected: [amber, 'fa-cloud', 'Firebase conectado · Sin iniciar sesión'],
             synced: [green, 'fa-cloud-arrow-up', 'Sincronizado'],
             error: [red, 'fa-triangle-exclamation', 'Error de sincronización']
         }[state];
-        b.className = map[0] + base;
-        b.title = detail || map[2];
-        b.setAttribute('aria-label', detail ? 'Error de sincronización: ' + detail : map[2]);
-        const visibleLabel = state === 'error' && detail ? ('Error: ' + String(detail).slice(0, 54)) : map[2];
-        b.innerHTML = '<i class="fa-solid ' + map[1] + '"></i> ' + visibleLabel;
+        b.className = map[0] + base; b.innerHTML = '<i class="fa-solid ' + map[1] + '"></i> ' + map[2];
     }
     function friendly(e) {
         const c = (e && e.code) || '';
-        if (c === 'auth/operation-not-allowed') return 'activa el acceso Anónimo en Firebase Authentication';
-        if (c === 'auth/unauthorized-domain') return 'añade el dominio de la app en Firebase Authentication > Dominios autorizados';
-        if (c === 'auth/network-request-failed') return 'sin conexión de red con Firebase';
-        if (c === 'permission-denied' || c === 'firestore/permission-denied') return 'Firestore deniega el acceso: revisa las reglas del documento printcost/shared';
-        if (c === 'unavailable' || c === 'firestore/unavailable' || c === 'deadline-exceeded') return 'Firebase no responde temporalmente; se volverá a intentar';
-        if (c === 'failed-precondition') return 'Firestore no está listo o necesita configuración en Firebase Console';
-        const message = (e && e.message) || String(e);
-        return c ? c + ': ' + message : message;
+        if (/invalid-credential|wrong-password|user-not-found|invalid-login/.test(c)) return 'Email o contraseña incorrectos.';
+        if (c === 'auth/email-already-in-use') return 'Ese email ya tiene cuenta. Inicia sesión.';
+        if (c === 'auth/weak-password') return 'La contraseña debe tener al menos 6 caracteres.';
+        if (c === 'auth/operation-not-allowed') return 'Activa el método «Correo electrónico/contraseña» en Firebase Authentication.';
+        if (c === 'auth/invalid-email') return 'Email no válido.';
+        if (c === 'auth/too-many-requests') return 'Demasiados intentos. Inténtalo más tarde.';
+        if (c === 'auth/network-request-failed') return 'Sin conexión. Comprueba tu red.';
+        return (e && e.message) || String(e);
     }
 
-    function isInvalidApiKey(e) {
-        const code = String((e && e.code) || '').toLowerCase();
-        const message = String((e && e.message) || e || '').toLowerCase();
-        return code.includes('api-key-not-valid') || code.includes('invalid-api-key') ||
-            message.includes('api-key-not-valid') || message.includes('api key not valid') ||
-            message.includes('please pass a valid api key');
-    }
-
-    async function returnToLocalMode(error) {
-        enabled = false;
-        stop();
-        user = null; docRef = null; attached = false; attachPromise = null;
-        if (authRetryTimer) { clearTimeout(authRetryTimer); authRetryTimer = null; }
-        if (syncRetryTimer) { clearTimeout(syncRetryTimer); syncRetryTimer = null; }
-        if (authUnsub) { try { authUnsub(); } catch (e) {} authUnsub = null; }
-        // No borrar el JSON: la persistencia de la configuración es independiente
-        // del resultado de autenticación. El usuario debe poder corregirlo en Ajustes.
-        const input = $('firebase-json-input');
-        const account = $('cloud-sync-account');
-        if (account) account.textContent = '';
-        badge('local');
-        status('Firebase no ha aceptado la clave API. La configuración se conserva en este dispositivo; revisa el JSON y las restricciones de la API. La aplicación sigue funcionando en modo local.', 'warn');
-        console.warn('PrintCost Pro ha vuelto al modo local porque la API de Firebase no es válida:', error);
-    }
-
-    function stop() {
-        if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
-        if (timer) { clearInterval(timer); timer = null; }
-    }
-
-    function scheduleSyncRetry(error) {
-        if (!enabled || !user || !docRef || syncRetryTimer) return;
-        const detail = friendly(error);
-        status('Conexión temporalmente interrumpida (' + detail + '). Reintentando automáticamente…', 'warn');
-        syncRetryTimer = setTimeout(function () {
-            syncRetryTimer = null;
-            if (enabled && user && docRef) begin();
-        }, syncRetryDelay);
-        syncRetryDelay = Math.min(syncRetryDelay * 2, 30000);
-    }
+    function stop() { if (unsub) { try { unsub(); } catch (e) {} unsub = null; } if (timer) { clearInterval(timer); timer = null; } }
 
     function applyRemote(d) {
         let cur;
         try { cur = JSON.parse(d.payload); } catch (e) { status('Los datos de la nube no son válidos.', 'err'); return; }
-        const importedCatalogVersion = d.clearAll ? null : localStorage.getItem('printcost_bsd_nov_2026_catalog_v1');
-        if (d.clearAll) localStorage.removeItem('printcost_bsd_nov_2026_catalog_v1');
+        // No permitir que una copia antigua de Firebase restaure el catálogo anterior
+        // después de importar la Tarifa BSD Noviembre 2026 en este dispositivo.
+        const importedCatalogVersion = localStorage.getItem('printcost_bsd_nov_2026_catalog_v1');
         if (importedCatalogVersion === '2026-11-v1') {
             let remotePrinters = [];
             try { remotePrinters = JSON.parse(cur['printcost_printers'] || '[]'); } catch (e) { remotePrinters = []; }
             const remoteHasBSDCatalog = Array.isArray(remotePrinters) && remotePrinters.some(p =>
                 p && (p.sourceTariff === 'Tarifa BSD Noviembre 2026' || String(p.id || '').startsWith('bsd2026-'))
             );
-            if (!remoteHasBSDCatalog) cur['printcost_printers'] = JSON.stringify(defaultPrinters.map(normalizePrinter));
+            if (!remoteHasBSDCatalog) {
+                cur['printcost_printers'] = JSON.stringify(defaultPrinters.map(normalizePrinter));
+            }
         }
         KEYS.forEach(k => { if (cur[k] === null || cur[k] === undefined) localStorage.removeItem(k); else localStorage.setItem(k, cur[k]); });
-        if (importedCatalogVersion === '2026-11-v1') localStorage.setItem('printcost_bsd_nov_2026_catalog_v1', '2026-11-v1');
+        if (importedCatalogVersion === '2026-11-v1') {
+            localStorage.setItem('printcost_bsd_nov_2026_catalog_v1', '2026-11-v1');
+        }
         try {
             quotes = [];
             loadLocalPrinters(); loadLocalQuotes(); loadAuditFleet(); renderDashboard();
             if (typeof navigateTo === 'function') navigateTo(currentView, false);
         } catch (e) { console.error(e); }
         lastHash = hashOf(snap());
-        setMeta({ uid: 'shared', lastTs: d.updatedAt || Date.now(), hash: lastHash });
+        setMeta({ uid: user.uid, lastTs: d.updatedAt || Date.now(), hash: lastHash });
         status('Datos actualizados desde la nube a las ' + clock(), 'ok'); badge('synced');
     }
 
@@ -5186,240 +5156,109 @@ service cloud.firestore {
         const cur = snap(), h = hashOf(cur);
         if (!force && h === lastHash) return;
         const payload = JSON.stringify(cur);
-        if (payload.length > MAX_CHARS) { status('Los datos superan el límite de sincronización (1 MB).', 'err'); badge('error', 'los datos superan el límite de sincronización'); return; }
+        if (payload.length > MAX_CHARS) { status('Los datos superan el límite de sincronización (1 MB).', 'err'); badge('error'); return; }
         busy = true;
         try {
             const ts = Date.now();
-            await docRef.set({ payload: payload, updatedAt: ts, deviceId: deviceId, v: 2 });
-            lastHash = h; setMeta({ uid: 'shared', lastTs: ts, hash: h });
+            await docRef.set({ payload: payload, updatedAt: ts, deviceId: deviceId, v: 1 });
+            lastHash = h; setMeta({ uid: user.uid, lastTs: ts, hash: h });
             status('Sincronizado a las ' + clock(), 'ok'); badge('synced');
-        } catch (e) {
-            if (isInvalidApiKey(e)) await returnToLocalMode(e);
-            else { status('Error al sincronizar: ' + friendly(e), 'err'); badge('error', friendly(e)); }
-        }
+        } catch (e) { status('Error al sincronizar: ' + friendly(e), 'err'); badge('error'); }
         finally { busy = false; }
     }
 
     async function begin() {
         stop();
-        if (syncRetryTimer) { clearTimeout(syncRetryTimer); syncRetryTimer = null; }
-        if (!docRef || !user) return;
+        if (!docRef) return;
         status('Sincronizando…');
         try {
             const s = await docRef.get(), m = getMeta();
-            lastHash = m.uid === 'shared' ? (m.hash || '') : '';
+            lastHash = m.uid === user.uid ? (m.hash || '') : '';
             if (s.exists) {
                 const d = s.data();
-                if (m.uid !== 'shared') {
-                    const useCloud = confirm('Ya hay datos compartidos en Firebase. Aceptar = cargarlos en este dispositivo (sustituye los datos locales). Cancelar = subir los datos locales de este dispositivo al espacio compartido.');
+                if (m.uid !== user.uid) {
+                    const useCloud = confirm('Se han encontrado datos de esta cuenta en la nube. Aceptar = cargarlos en este dispositivo (sustituye los datos locales). Cancelar = subir los datos de este dispositivo a la nube.');
                     if (useCloud) applyRemote(d); else await push(true);
                 } else if ((d.updatedAt || 0) > (m.lastTs || 0) && d.deviceId !== deviceId) {
-                    if (hashOf(snap()) !== lastHash) {
-                        const useCloud = confirm('Hay cambios en la nube y también datos locales distintos. Aceptar = cargar los datos compartidos. Cancelar = publicar los datos locales.');
-                        if (useCloud) applyRemote(d); else await push(true);
-                    } else applyRemote(d);
-                } else {
-                    await push(false);
-                    if (!busy && hashOf(snap()) === lastHash) { status('Sincronizado a las ' + clock(), 'ok'); badge('synced'); }
-                }
-            } else {
-                await push(true);
-            }
-        } catch (e) {
-            if (isInvalidApiKey(e)) { await returnToLocalMode(e); return; }
-            status('Error al conectar con los datos compartidos: ' + friendly(e), 'err');
-            badge('error', friendly(e));
-            scheduleSyncRetry(e);
-            return;
-        }
-        syncRetryDelay = 2000;
+                    if (hashOf(snap()) !== lastHash) await push(true); else applyRemote(d);
+                } else { await push(false); if (!busy && hashOf(snap()) === lastHash) { status('Sincronizado a las ' + clock(), 'ok'); badge('synced'); } }
+            } else { await push(true); }
+        } catch (e) { status('Error de conexión: ' + friendly(e), 'err'); badge('error'); return; }
         unsub = docRef.onSnapshot(function (s) {
             if (!s.exists || (s.metadata && s.metadata.hasPendingWrites)) return;
             const d = s.data(), m = getMeta();
             if (d.deviceId === deviceId || (d.updatedAt || 0) <= (m.lastTs || 0)) return;
             applyRemote(d);
-        }, function (e) {
-            if (isInvalidApiKey(e)) { returnToLocalMode(e); return; }
-            const detail = friendly(e);
-            status('Error de conexión con Firestore: ' + detail, 'err');
-            badge('error', detail);
-            scheduleSyncRetry(e);
-        });
+        }, function (e) { status('Error de conexión: ' + friendly(e), 'err'); badge('error'); });
         timer = setInterval(function () { push(false); }, 3000);
     }
 
-    async function onUser(u) {
-        if (!enabled) return;
-        if (!u) {
-            stop(); user = null; docRef = null;
-            if (authTransition) return;
-            authTransition = true;
-            try {
-                const auth = firebase.auth();
-                if (firebase.auth.Auth && firebase.auth.Auth.Persistence) {
-                    try { await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); }
-                    catch (persistenceError) { console.warn('Firebase no admite persistencia LOCAL en este navegador; se usará la persistencia predeterminada.', persistenceError); }
-                }
-                await auth.signInAnonymously();
-                authRetryDelay = 1500;
-            } catch (e) {
-                if (isInvalidApiKey(e)) { await returnToLocalMode(e); return; }
-                status('No se pudo autorizar este dispositivo: ' + friendly(e), 'err'); badge('error', friendly(e));
-                const code = (e && e.code) || '';
-                if (!['auth/operation-not-allowed', 'auth/invalid-api-key', 'auth/app-deleted'].includes(code)) {
-                    scheduleAuthRetry();
-                }
-            } finally { authTransition = false; }
-            return;
-        }
-
-        // Migración conservadora: si había una sesión antigua con email, copia su documento
-        // al documento compartido solo si este todavía no existe. Nunca sobrescribe el común.
-        if (!u.isAnonymous) {
-            if (authTransition) return;
-            authTransition = true;
-            try {
-                status('Preparando los datos existentes para la sincronización compartida…');
-                const db = firebase.firestore();
-                const legacyRef = db.collection('printcost').doc(u.uid);
-                const sharedRef = db.collection('printcost').doc(SHARED_DOC);
-                const legacy = await legacyRef.get();
-                const shared = await sharedRef.get();
-                if (legacy.exists && !shared.exists) {
-                    await sharedRef.set(legacy.data());
-                    try {
-                        const legacyPayload = JSON.parse(legacy.data().payload || '{}');
-                        const localHash = hashOf(snap());
-                        if (hashOf(legacyPayload) === localHash) {
-                            setMeta({ uid: 'shared', lastTs: legacy.data().updatedAt || Date.now(), hash: localHash });
-                        }
-                    } catch (migrationMetaError) {
-                        console.warn('No se pudo comparar el estado local durante la migración:', migrationMetaError);
-                    }
-                }
-                await firebase.auth().signOut();
-                await firebase.auth().signInAnonymously();
-            } catch (e) {
-                status('No se pudo preparar la sesión anterior: ' + friendly(e), 'err'); badge('error', friendly(e));
-            } finally { authTransition = false; }
-            return;
-        }
-
+    function onUser(u) {
         stop(); user = u;
         const lbl = $('cloud-sync-account');
-        if (lbl) lbl.textContent = 'Este dispositivo está autorizado automáticamente.';
-        docRef = firebase.firestore().collection('printcost').doc(SHARED_DOC);
+        if (!u) {
+            docRef = null; badge('connected');
+            if (lbl) lbl.textContent = '';
+            status('Conectado a Firebase. Inicia sesión para sincronizar.', 'warn'); return;
+        }
+        if (lbl) lbl.textContent = 'Sesión iniciada: ' + (u.email || u.uid);
+        docRef = firebase.firestore().collection('printcost').doc(u.uid);
         begin();
     }
 
-    function scheduleAuthRetry() {
-        if (!enabled || authRetryTimer) return;
-        authRetryTimer = setTimeout(function () {
-            authRetryTimer = null;
-            if (!enabled) return;
-            const auth = firebase.auth();
-            if (auth.currentUser) onUser(auth.currentUser);
-            else onUser(null);
-        }, authRetryDelay);
-        authRetryDelay = Math.min(authRetryDelay * 2, 30000);
+    function attach() {
+        if (!window.firebase || !firebase.apps || !firebase.apps.length || attached) return;
+        attached = true;
+        try { firebase.auth().onAuthStateChanged(onUser); }
+        catch (e) { status('Error de conexión: ' + friendly(e), 'err'); badge('error'); }
+    }
+    function detach() {
+        stop(); user = null; docRef = null; attached = false;
+        const lbl = $('cloud-sync-account'); if (lbl) lbl.textContent = '';
+        status('Aún no has iniciado sesión.');
+        if (window.firebase && firebase.apps && firebase.apps.length) { try { firebase.auth().signOut(); } catch (e) {} }
     }
 
-    async function attach() {
-        if (!window.firebase || !firebase.apps || !firebase.apps.length || attached) return attachPromise;
-        attached = true; enabled = true;
-        attachPromise = (async function () {
+    async function authAction(kind) {
+        if (!window.firebase || !firebase.apps || !firebase.apps.length) { alert('Primero guarda y conecta la configuración de Firebase.'); return; }
+        const email = $('cloud-email').value.trim(), pass = $('cloud-password').value;
+        if (!email || !pass) { alert('Introduce tu email y contraseña.'); return; }
+        try {
+            status('Conectando…');
             try {
                 const auth = firebase.auth();
                 if (firebase.auth.Auth && firebase.auth.Auth.Persistence) {
-                    try { await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); }
-                    catch (persistenceError) { console.warn('No se pudo fijar persistencia LOCAL; se usará la configuración predeterminada.', persistenceError); }
+                    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
                 }
-                authUnsub = auth.onAuthStateChanged(onUser, function (e) {
-                    if (isInvalidApiKey(e)) { returnToLocalMode(e); return; }
-                    status('Error de autenticación Firebase: ' + friendly(e), 'err');
-                    badge('error', friendly(e));
-                    scheduleAuthRetry();
-                });
-            } catch (e) {
-                if (isInvalidApiKey(e)) { await returnToLocalMode(e); return; }
-                status('No se pudo restaurar la sesión Firebase: ' + friendly(e), 'err');
-                badge('error', friendly(e));
-                scheduleAuthRetry();
+            } catch (persistError) {
+                console.warn('No se pudo fijar la persistencia local de Firebase Authentication:', persistError);
             }
-        })();
-        return attachPromise;
+            if (kind === 'up') await firebase.auth().createUserWithEmailAndPassword(email, pass);
+            else await firebase.auth().signInWithEmailAndPassword(email, pass);
+            $('cloud-password').value = '';
+        } catch (e) { status(friendly(e), 'err'); }
     }
-
-    function detach() {
-        enabled = false; stop(); user = null; docRef = null;
-        if (authRetryTimer) { clearTimeout(authRetryTimer); authRetryTimer = null; }
-        if (syncRetryTimer) { clearTimeout(syncRetryTimer); syncRetryTimer = null; }
-        attachPromise = null;
-        if (authUnsub) { try { authUnsub(); } catch (e) {} authUnsub = null; }
-        attached = false;
-        if (window.firebase && firebase.apps && firebase.apps.length) {
-            try { firebase.auth().signOut(); } catch (e) {}
-        }
-        const lbl = $('cloud-sync-account'); if (lbl) lbl.textContent = '';
-        status('Firebase desconectado. Los datos locales permanecen en este dispositivo.');
-    }
-
+    window.cloudSignIn = function () { return authAction('in'); };
+    window.cloudSignUp = function () { return authAction('up'); };
+    window.cloudSignOut = async function () {
+        if (!window.firebase || !firebase.apps || !firebase.apps.length) return;
+        await firebase.auth().signOut();
+        status('Sesión cerrada. Los datos siguen guardados en este dispositivo.');
+    };
     window.cloudSyncNow = async function () {
-        if (!user || !docRef) { status('Esperando la autorización automática de este dispositivo…', 'warn'); return; }
+        if (!user) { alert('Inicia sesión primero.'); return; }
         await begin();
     };
-    async function clearAll() {
-        const cfgSaved = !!localStorage.getItem('printcost_firebase_config');
-        if (cfgSaved && (!docRef || !user)) {
-            throw new Error('Firebase está configurado pero todavía no está conectado. Espera a que se sincronice y vuelve a intentarlo para borrar también la copia en la nube.');
-        }
-        KEYS.forEach(k => localStorage.removeItem(k));
-        localStorage.removeItem('printcost_bsd_nov_2026_catalog_v1');
-        const empty = {}; KEYS.forEach(k => { empty[k] = null; });
-        if (docRef && user) {
-            const ts = Date.now();
-            await docRef.set({ payload: JSON.stringify(empty), updatedAt: ts, deviceId: deviceId, v: 2, clearAll: true });
-            lastHash = hashOf(snap());
-            setMeta({ uid: 'shared', lastTs: ts, hash: lastHash });
-            status('Base de datos vaciada en este dispositivo y en los demás dispositivos conectados.', 'ok');
-            badge('synced');
-        } else {
-            lastHash = hashOf(snap());
-            localStorage.removeItem(META);
-            status('Datos locales vaciados. No hay una conexión Firebase activa.', 'ok');
-            badge('local');
-        }
-        try {
-            if (typeof quotes !== 'undefined') quotes = [];
-            if (typeof loadLocalPrinters === 'function') loadLocalPrinters();
-            if (typeof loadLocalQuotes === 'function') loadLocalQuotes();
-            if (typeof loadAuditFleet === 'function') loadAuditFleet();
-            if (typeof renderDashboard === 'function') renderDashboard();
-            if (typeof navigateTo === 'function') navigateTo(currentView, false);
-        } catch (e) { console.warn('No se pudo actualizar la pantalla tras vaciar la base de datos:', e); }
-        return true;
-    }
+    window.__cloudSync = { attach: attach, detach: detach, push: push, snap: snap };
 
-    window.clearPrintCostDatabase = async function () {
-        if (!confirm('¿Estás seguro de que quieres vaciar la base de datos? Se eliminarán los catálogos, presupuestos, auditorías y ajustes de empresa.')) return false;
-        if (!confirm('SEGUNDA CONFIRMACIÓN: esta acción no se puede deshacer y también borrará los datos compartidos en Firebase para todos tus dispositivos. ¿Confirmas el vaciado?')) return false;
-        try {
-            await clearAll();
-            alert('La base de datos se ha vaciado correctamente.');
-            return true;
-        } catch (e) {
-            alert('No se ha podido vaciar la base de datos: ' + (e.message || e));
-            return false;
-        }
-    };
-    window.__cloudSync = { attach: attach, detach: detach, push: push, snap: snap, clearAll: clearAll };
-
+    /* Enganches con las funciones de Firebase existentes */
     const _init = window.initFirebase;
     window.initFirebase = function () { _init.apply(this, arguments); attach(); };
     const _clear = window.clearFirebaseSettings;
     window.clearFirebaseSettings = function () {
+        const before = localStorage.getItem('printcost_firebase_config');
         _clear.apply(this, arguments);
-        detach();
+        if (before && !localStorage.getItem('printcost_firebase_config')) detach();
     };
 })();
 </script>
@@ -5431,7 +5270,7 @@ service cloud.firestore {
    visibles, atributos, alertas, gráficos, PDF y emails.
    ============================================================ */
 (function () {
-    const DICT = {"-- Seleccionar Equipo --": "-- Select Printer --", "-- Selección Manual / Genérica --": "-- Manual / Generic Selection --", "1 Año (12 Meses)": "1 Year (12 Months)", "1. Equipo, Duración y Volúmenes": "1. Printer, Term and Volumes", "1. Especificaciones Principales": "1. Main Specifications", "1. Parque Actual del Cliente": "1. Customer's Current Fleet", "2. Consumibles Monocromo (K)": "2. Monochrome Supplies (K)", "2. Precio Equipo y Renting": "2. Equipment Price and Rental", "2. Propuesta de Tu Catálogo": "2. Proposal from Your Catalog", "3 Años (36 Meses)": "3 Years (36 Months)", "3. Consumibles Color (C, M, Y)": "3. Color Supplies (C, M, Y)", "3. Coste Técnico y PVP (€ Sin IVA)": "3. Technical Cost and Retail Price (€ excl. VAT)", "5 Años (60 Meses)": "5 Years (60 Months)", "Abre directamente la interfaz de Gmail": "Opens the Gmail interface directly", "Abre la ventana de redacción de Outlook Web": "Opens the Outlook Web compose window", "Acciones": "Actions", "Ahorro Estimado Anual": "Estimated Annual Savings", "Ahorro Neto (€)": "Net Savings (€)", "Ahorro positivo mensual": "Positive monthly savings", "Ajustar a Márgenes Positivos (+40%)": "Adjust to Positive Margins (+40%)", "Ajustes": "Settings", "Ajustes y Respaldo": "Settings and Backup", "Amortización / ROI": "Payback / ROI", "Amortización Equipo:": "Equipment Payback:", "Anual": "Annual", "Anual Con IVA": "Annual incl. VAT", "Auditoría de Parque y Simulador de Ahorro": "Fleet Audit and Savings Simulator", "Auditoría y Ahorro": "Audit and Savings", "Av. Principal N.12": "12 Main Ave.", "Añadir Impresora": "Add Printer", "Añadir Máquina": "Add Machine", "Añadir Nueva Impresora": "Add New Printer", "BENEFICIO NETO COPIAS:": "NET PROFIT ON COPIES:", "BENEFICIO NETO EQUIPO:": "NET PROFIT ON EQUIPMENT:", "BENEFICIO NETO TOTAL:": "TOTAL NET PROFIT:", "Beneficio Total": "Total Profit", "Bote": "Waste Box", "Bote Residuo": "Waste Box", "Bote de Residuo": "Waste Box", "Botes de Residuo": "Waste Boxes", "Buscar por consumible o modelo de impresora...": "Search by supply or printer model...", "Buscar por marca o modelo...": "Search by brand or model...", "CARACTERÍSTICA / MÉTRICA": "FEATURE / METRIC", "CIF / NIF": "Tax ID", "Calculadora": "Calculator", "Calculadora Comercial": "Sales Calculator", "Calculadora Comercial MPS": "MPS Sales Calculator", "Calculadora Comercial y Análisis de Márgenes": "Sales Calculator and Margin Analysis", "Calculadora MPS": "MPS Calculator", "Cancelar": "Cancel", "Cargar Archivo JSON": "Load JSON File", "Cargar Modelo del Catálogo": "Load Model from Catalog", "Cargar en Calculadora MPS": "Load into MPS Calculator", "Cargar en Comparador MPS": "Load into MPS Comparator", "Catálogo": "Catalog", "Catálogo General": "General Catalog", "Catálogo de Impresoras y Fichas Técnicas": "Printer Catalog and Data Sheets", "Cerrar": "Close", "Cierre de Ventas por TCO": "Close Sales with TCO", "Clasificación diferenciada por tecnología (Color / Monocromo) y función (Multifunción / Impresora).": "Classified by technology (Color / Monochrome) and function (Multifunction / Printer).", "Cliente / Empresa": "Customer / Company", "Cliente por defecto (Mailto)": "Default email app (Mailto)", "Color": "Color", "Color • Formato A3": "Color • A3 Format", "Comparador": "Comparator", "Comparador Cara a Cara de Impresoras": "Side-by-Side Printer Comparator", "Comparativa de Costes por Página (€ Sin IVA)": "Cost per Page Comparison (€ excl. VAT)", "Componente / Consumible": "Component / Supply", "Concepto": "Item", "Configura el equipo, precios, renting y PVP con control total de márgenes.": "Set up the printer, prices, rental and retail price with full margin control.", "Configuración API de Firebase (JSON Completo)": "Firebase API Configuration (Full JSON)", "Consulta los precios de compra, costes técnicos prorrateados sin IVA o añade nuevos modelos.": "Check purchase prices, prorated technical costs excl. VAT, or add new models.", "Consumible": "Supply", "Consumible / Componente": "Supply / Component", "Consumibles": "Supplies", "Contrato": "Contract", "Contrato (Meses)": "Contract (Months)", "Copia de Seguridad e Importación": "Backup and Import", "Correa": "Belt", "Correa Transferencia": "Transfer Belt", "Correa de Transferencia": "Transfer Belt", "Correas de Transferencia": "Transfer Belts", "Coste / Pág (€)": "Cost / Page (€)", "Coste / Página (€)": "Cost / Page (€)", "Coste B/N:": "B/W Cost:", "Coste Parque Actual": "Current Fleet Cost", "Coste Técnico B/N": "B/W Technical Cost", "Coste Técnico B/N (Sin IVA)": "B/W Technical Cost (excl. VAT)", "Coste Técnico B/N (€/pág)": "B/W Technical Cost (€/page)", "Coste Técnico Color": "Color Technical Cost", "Coste Técnico Color (Sin IVA)": "Color Technical Cost (excl. VAT)", "Coste Técnico Color (€/pág)": "Color Technical Cost (€/page)", "Coste Técnico Total:": "Total Technical Cost:", "Coste copia B/N (€)": "B/W cost per copy (€)", "Coste copia Color (€)": "Color cost per copy (€)", "Costes Totales (Sin IVA):": "Total Costs (excl. VAT):", "Crear Nuevo Presupuesto": "Create New Quote", "Cuota Renting": "Rental Fee", "Cuota/Renting (€/mes/ud)": "Rental Fee (€/month/unit)", "Cálculo dinámico": "Live calculation", "DESGLOSE 1: SERVICIO POR COPIA": "BREAKDOWN 1: PER-COPY SERVICE", "DESGLOSE 2: EQUIPO Y RENTING": "BREAKDOWN 2: EQUIPMENT AND RENTAL", "Dashboard": "Dashboard", "Dashboard General": "General Dashboard", "Demuestra al cliente cuánto ahorra sustituyendo su parque actual por tus soluciones del catálogo.": "Show the customer how much they save by replacing their current fleet with solutions from your catalog.", "Descargar PDF": "Download PDF", "Desconectar": "Disconnect", "Desglose Técnico de Consumibles y Piezas": "Technical Breakdown of Supplies and Parts", "Desglose de Impuestos (IVA 21%)": "Tax Breakdown (VAT 21%)", "Detalle del Presupuesto Comercial": "Commercial Quote Details", "Dirección / Ubicación": "Address / Location", "Ej. 22.000": "E.g. 22,000", "Ej. Empresa Gráfica S.L.": "E.g. Graphic Company Ltd.", "Ej. Incluye instalación y soporte...": "E.g. Includes installation and support...", "Ej. Lexmark, HP, Kyocera": "E.g. Lexmark, HP, Kyocera", "Ej. Tóner Negro de Alta Capacidad": "E.g. High-Capacity Black Toner", "Ej. XC9525": "E.g. XC9525", "Ej: Ricoh MP2001 en alquiler": "E.g. Ricoh MP2001 rented", "El PVP ofrecido está por debajo del coste técnico o la cuota de Renting no cubre el coste del equipo.": "The offered retail price is below the technical cost, or the rental fee does not cover the equipment cost.", "El PVP por copia se autocompleta con el coste calculado de cada modelo de tu catálogo; puedes ajustarlo manualmente.": "The retail price per copy is auto-filled with the calculated cost of each model in your catalog; you can adjust it manually.", "Eliminar Consumible": "Delete Supply", "Eliminar máquina": "Remove machine", "Eliminar Presupuesto": "Delete Quote", "Email del Cliente *": "Customer Email *", "Enviar Presupuesto por Email": "Send Quote by Email", "Enviar por Correo": "Send by Email", "Enviar por Email (Gmail / Outlook)": "Send by Email (Gmail / Outlook)", "Equipo 1": "Printer 1", "Equipo 2": "Printer 2", "Equipo 3": "Printer 3", "Equipo 4": "Printer 4", "Equipo Asociado": "Linked Printer", "Equipo Asociado *": "Linked Printer *", "Equipos en Catálogo": "Printers in Catalog", "Explorar Catálogo": "Browse Catalog", "Exportar Catálogo JSON": "Export Catalog JSON", "Exportar JSON": "Export JSON", "Exportar PDF Cliente": "Export Customer PDF", "Facturación Copias B/N:": "B/W Copies Billing:", "Facturación Copias Color:": "Color Copies Billing:", "Facturación Mensual": "Monthly Billing", "Facturación Total (Sin IVA):": "Total Billing (excl. VAT):", "Fecha": "Date", "Ficha": "Data Sheet", "Ficha Técnica Detallada": "Detailed Data Sheet", "Formato": "Format", "Formato A3": "A3 Format", "Formato A4": "A4 Format", "Función": "Function", "Fusor": "Fuser", "Gasto Actual (Año)": "Current Spend (Year)", "Gasto mensual": "Monthly spend", "Gestión Inteligente de Impresión y Márgenes": "Smart Print and Margin Management", "Gestión MPS, Calculadora y Simulador TCO": "MPS Management, Calculator and TCO Simulator", "Gestión de Consumibles": "Supplies Management", "Gestor de Consumibles y Recambios": "Supplies and Spare Parts Manager", "Gestor de ofertas →": "Quote manager →", "Gmail (Web)": "Gmail (Web)", "Guardar Consumible": "Save Supply", "Guardar Impresora": "Save Printer", "Guardar Presupuesto": "Save Quote", "Guardar Presupuesto Comercial": "Save Commercial Quote", "Guardar y Conectar Firebase": "Save and Connect Firebase", "Herramienta de Auditoría y Cierre Financiero": "Audit and Financial Closing Tool", "Historial de Presupuestos": "Quote History", "Impacto visual de ahorro:": "Visual savings impact:", "Importar JSON": "Import JSON", "Impresora": "Printer", "Impresora (A4)": "Printer (A4)", "Impresora (Solo Impresión)": "Printer (Print Only)", "Impresora • Formato A4 • Color": "Printer • A4 Format • Color", "Impresora • Monocromo (A4)": "Printer • Monochrome (A4)", "Imprimir": "Print", "Imprimir Directamente": "Print Directly", "Incluye renting previo, tóneres sueltos, mantenimiento y reparaciones de todo el parque actual del cliente.": "Includes previous rental, loose toners, maintenance and repairs for the customer's entire current fleet.", "Ingresos Renting / Venta:": "Rental / Sales Revenue:", "Inmediata": "Immediate", "Inmediato": "Immediate", "Introduce todo el parque de impresoras actual del cliente (con sus costes reales) y la propuesta completa de tu catálogo para calcular el ahorro total, máquina a máquina.": "Enter the customer's entire current printer fleet (with real costs) and the full proposal from your catalog to calculate total savings, machine by machine.", "Kit Fusor": "Fuser Kit", "Kits Fusores": "Fuser Kits", "Limpiar Selección": "Clear Selection", "Marca": "Brand", "Matriz Comparativa de Retorno de Inversión (ROI)": "ROI Comparison Matrix", "Matriz ROI": "ROI Matrix", "Menor Coste B/N (Sin IVA)": "Lowest B/W Cost (excl. VAT)", "Menor Coste Color (Sin IVA)": "Lowest Color Cost (excl. VAT)", "Mensual": "Monthly", "Mensual Con IVA": "Monthly incl. VAT", "Modelo": "Model", "Modelo / Referencia": "Model / Reference", "Modelo Impresora": "Printer Model", "Modelo Propuesto": "Proposed Model", "Modelo de Impresora:": "Printer Model:", "Modifica o elimina recambios, ajusta rendimientos y costes técnicos prorrateados.": "Edit or delete spare parts, adjust yields and prorated technical costs.", "Modificar Consumible": "Edit Supply", "Monocromo": "Monochrome", "Monocromo (B/N)": "Monochrome (B/W)", "Monocromo • A4": "Monochrome • A4", "Monocromo • Formato A3": "Monochrome • A3 Format", "Monocromo • Formato A4": "Monochrome • A4 Format", "Muestra gráfica de la brecha financiera entre mantener el parque actual vs implementar la propuesta completa.": "Chart of the financial gap between keeping the current fleet and implementing the full proposal.", "Multifunción": "Multifunction", "Multifunción (A4)": "Multifunction (A4)", "Multifunción • Color (A3)": "Multifunction • Color (A3)", "Multifunción • Monocromo (A4)": "Multifunction • Monochrome (A4)", "N/A Monocromo": "N/A Monochrome", "No hay presupuestos guardados aún. Genera uno desde la Calculadora MPS.": "No saved quotes yet. Create one from the MPS Calculator.", "Nombre / Empresa del Cliente *": "Customer Name / Company *", "Nombre del Consumible *": "Supply Name *", "Nueva Impresora": "New Printer", "Nuevo Consumible": "New Supply", "OTRAS POSICIONES DEL RANKING (4º AL 10º)": "OTHER RANKING POSITIONS (4TH TO 10TH)", "Observaciones": "Notes", "Observaciones:": "Notes:", "Outlook / Office 365 (Web)": "Outlook / Office 365 (Web)", "PVP Ofrecido B/N (€/pág)": "Offered B/W Retail Price (€/page)", "PVP Ofrecido Color (€/pág)": "Offered Color Retail Price (€/page)", "PVP Ofrecido (€/pág)": "Offered Retail Price (€/page)", "PVP copia B/N (€)": "B/W retail price per copy (€)", "PVP copia Color (€)": "Color retail price per copy (€)", "Panel de Control MPS v2.0": "MPS Control Panel v2.0", "Parque Completo": "Full Fleet", "Pega directamente el bloque JSON de Firebase proporcionado por la consola.": "Paste the Firebase JSON block provided by the console directly.", "Pegar Objeto JSON de Configuración *": "Paste Configuration JSON Object *", "Periodo": "Period", "Plazo amortización:": "Payback period:", "Precio (€)": "Price (€)", "Precio Compra (€)": "Purchase Price (€)", "Precio Compra Máquina": "Machine Purchase Price", "Precio Compra Máquina (Sin IVA)": "Machine Purchase Price (excl. VAT)", "Precio Compra Máquina (€ Sin IVA)": "Machine Purchase Price (€ excl. VAT)", "Precio Máquina:": "Machine Price:", "Precio Sin IVA (€)": "Price excl. VAT (€)", "Precio Sin IVA (€) *": "Price excl. VAT (€) *", "Precio Venta (€)": "Sale Price (€)", "Presupuestos": "Quotes", "Presupuestos Guardados": "Saved Quotes", "Presupuestos y Ofertas Guardadas": "Saved Quotes and Offers", "Probar Conexión": "Test Connection", "Propuesta Tu Catálogo": "Your Catalog Proposal", "Proyección Visual del Gasto Acumulado (TCO)": "Visual Projection of Cumulative Spend (TCO)", "RESUMEN GLOBAL (COPIAS + EQUIPO)": "GLOBAL SUMMARY (COPIES + EQUIPMENT)", "Ranking Top 10 Menor Coste por Copia": "Top 10 Ranking: Lowest Cost per Copy", "Rend. (Pag)": "Yield (Pg)", "Rendimiento (Pag)": "Yield (Pg)", "Rendimiento (Páginas) *": "Yield (Pages) *", "Renting (€/mes/ud)": "Rental (€/month/unit)", "Renting Mensual (€)": "Monthly Rental (€)", "Restablecer": "Reset", "Restablecer Catálogo BSD Noviembre 2026": "Restore Default Demo Catalog", "Selecciona hasta 4 modelos para comparar precios, consumibles, volúmenes recomendados y costes por copia.": "Select up to 4 models to compare prices, supplies, recommended volumes and cost per copy.", "Selecciona la plataforma con la que deseas redactar y enviar este presupuesto a": "Choose the platform to write and send this quote to", "Simulador TCO y ROI": "TCO and ROI Simulator", "Simulador de Ahorro ROI": "ROI Savings Simulator", "Simular Ahorro Financiero": "Simulate Financial Savings", "Sistema optimizado con generación de PDF e impresión 100% garantizada, integración directa de correos web y simulador de ahorro TCO para cierre de ventas.": "Optimized system with PDF generation and guaranteed printing, direct web email integration and a TCO savings simulator to close sales.", "TCO actual de todo el parque auditado": "Current TCO of the entire audited fleet", "TOTAL GASTO MENSUAL ACTUAL": "TOTAL CURRENT MONTHLY SPEND", "TOTAL GASTO MENSUAL PROPUESTO": "TOTAL PROPOSED MONTHLY SPEND", "Tambor": "Drum", "Tambor / Drum": "Drum", "Tambor Amarillo (Y)": "Yellow Drum (Y)", "Tambor Cian (C)": "Cyan Drum (C)", "Tambor Magenta (M)": "Magenta Drum (M)", "Tambor Negro (K)": "Black Drum (K)", "Tambores / Drums": "Drums", "Teléfono Contacto": "Contact Phone", "Teléfono:": "Phone:", "Tipo": "Type", "Tipo Impresión": "Print Type", "Tipo de Componente *": "Component Type *", "Tipo de Impresión": "Print Type", "Todas las Funciones": "All Functions", "Todos los formatos (A4 / A3)": "All formats (A4 / A3)", "Todos los tipos": "All types", "Todos los tipos (Color / Mono)": "All types (Color / Mono)", "Top 10": "Top 10", "Top 10 Menor Coste": "Top 10 Lowest Cost", "Top Color": "Top Color", "Top Monocromo (B/N)": "Top Monochrome (B/W)", "Top equipos más eficientes en B/N y Color": "Most efficient printers in B/W and Color", "Total Contrato Con IVA": "Total Contract incl. VAT", "Total Facturación Copias:": "Total Copies Billing:", "Totales Globales": "Global Totals", "Tóner": "Toner", "Tóner Amarillo (Y)": "Yellow Toner (Y)", "Tóner Cian (C)": "Cyan Toner (C)", "Tóner Magenta (M)": "Magenta Toner (M)", "Tóner Negro (K)": "Black Toner (K)", "Tóners": "Toners", "Uds": "Units", "Vaciar Base de Datos": "Clear Database", "Vaciar Datos": "Clear Data", "Ver Comparador": "View Comparator", "Ver Detalle": "View Details", "Ver todo el catálogo →": "View full catalog →", "Visualiza presupuestos, descárgalos en PDF formateado o envíalos directamente por correo web (Gmail / Outlook).": "View quotes, download them as formatted PDF or send them directly by web email (Gmail / Outlook).", "Vol. B/N": "B/W Vol.", "Vol. Color": "Color Vol.", "Vol. Máximo:": "Max Vol.:", "Vol. Mínimo:": "Min Vol.:", "Volumen B/N": "B/W Volume", "Volumen Color": "Color Volume", "Volumen Mensual B/N": "Monthly B/W Volume", "Volumen Mensual Color": "Monthly Color Volume", "Volumen Mensual Incluido": "Monthly Volume Included", "Volumen Máximo Mensual": "Maximum Monthly Volume", "Volumen Máximo Recomendado": "Recommended Maximum Volume", "Volumen Mínimo Mensual": "Minimum Monthly Volume", "Volumen Mínimo Recomendado": "Recommended Minimum Volume", "¡Atención! El Beneficio del Presupuesto es Negativo": "Warning! The quote profit is negative", "← Volver / Atrás": "← Back", "/ pág": "/ page", "Blanco y Negro (Monocromo)": "Black and White (Monochrome)", "CIF / NIF:": "Tax ID:", "COPIAS INCLUIDAS Y PRECIO POR PÁGINA": "INCLUDED COPIES AND PRICE PER PAGE", "Cliente / Empresa:": "Customer / Company:", "Cuota de Renting Mensual:": "Monthly Rental Fee:", "DATOS DEL CLIENTE": "CUSTOMER DETAILS", "Dirección:": "Address:", "Duración del Contrato:": "Contract Term:", "EQUIPO Y CONDICIONES DEL RENTING": "EQUIPMENT AND RENTAL TERMS", "Email:": "Email:", "PRESUPUESTO COMERCIAL MPS": "MPS COMMERCIAL QUOTE", "Gmail": "Gmail", "Coste B/N (€)": "B/W Cost (€)", "Coste Color (€)": "Color Cost (€)", "1 Año": "1 Year", "2 Años": "2 Years", "3 Años": "3 Years", "4 Años": "4 Years", "5 Años": "5 Years", "Gasto Parque Actual (€)": "Current Fleet Spend (€)", "Propuesta Tu Catálogo (€)": "Your Catalog Proposal (€)", "Sin ahorro": "No savings", "PrintCost Pro - Gestor MPS, Calculadora y Simulador TCO": "PrintCost Pro - MPS Manager, Calculator and TCO Simulator", "Por favor, pega el bloque JSON con la configuración de tu proyecto Firebase.": "Please paste the JSON block with your Firebase project configuration.", "El JSON introducido no contiene los campos obligatorios \"apiKey\" y \"projectId\".": "The JSON entered does not contain the required \"apiKey\" and \"projectId\" fields.", "¡Configuración de Firebase guardada y conectada correctamente!": "Firebase configuration saved and connected successfully!", "El texto introducido no es un objeto JSON válido.": "The text entered is not a valid JSON object.", "¿Deseas eliminar la configuración de Firebase y volver a LocalStorage local?": "Do you want to remove the Firebase configuration and go back to local storage?", "Firebase desconectado.": "Firebase disconnected.", "Primero debes guardar la configuración JSON de Firebase.": "You must save the Firebase JSON configuration first.", "¡Conexión con Firebase establecida correctamente!": "Firebase connection established successfully!", "No se pudo inicializar Firebase.": "Could not initialize Firebase.", "¡Presupuesto guardado correctamente!": "Quote saved successfully!", "¿Deseas eliminar este presupuesto?": "Do you want to delete this quote?", "¿Deseas eliminar este consumible del equipo asociándolo a 0 € y 0 pág?": "Do you want to remove this supply from the printer by setting it to €0 and 0 pages?", "¿Deseas eliminar esta impresora?": "Do you want to delete this printer?", "¡Catálogo cargado!": "Catalog loaded!", "Error al leer el JSON.": "Error reading the JSON.", "¿Vaciar toda la base de datos de impresoras?": "Clear the entire printer database?", "¿Restablecer las 36 impresoras de la Tarifa BSD Noviembre 2026?": "Restore the default demo catalog?", "Se ha activado el visor de impresión nativo. Selecciona 'Guardar como PDF'.": "The native print viewer has been opened. Select 'Save as PDF'.", "Sin especificar": "Not specified", "Personalización de PDF y Email": "PDF and Email Customization", "Estos datos se usan en la cabecera del PDF del presupuesto y en los emails que envías a tus clientes. El nombre y el contacto de la empresa empiezan vacíos y no aparecen hasta que los rellenes; en los demás campos, si lo dejas vacío se usa el texto por defecto.": "This information is used in the header of the quote PDF and in the emails you send to your customers. Company name and contact start empty and do not appear until you fill them in; for the other fields, leaving them empty uses the default text.", "Nombre de la empresa (PDF y firma)": "Company name (PDF and signature)", "Línea de contacto del PDF (email, teléfono, ciudad...)": "PDF contact line (email, phone, city...)", "Nota al pie del PDF (opcional)": "PDF footer note (optional)", "Asunto del email": "Email subject", "Introducción del email": "Email introduction", "Despedida del email": "Email closing", "Firma del email": "Email signature", "Puedes usar {cliente}, {equipo} y {empresa} en los textos del email.": "You can use {cliente}, {equipo} and {empresa} in the email texts.", "Guardar Personalización": "Save Customization", "Restablecer Valores por Defecto": "Restore Defaults", "¡Personalización guardada!": "Customization saved!", "Valores por defecto restaurados.": "Defaults restored.", "¿Restablecer los textos del PDF y del email a los valores por defecto?": "Restore the PDF and email texts to their default values?", "Sincronizar mis datos entre dispositivos": "Sync my data across devices", "No necesitas crear una cuenta ni compartir contraseñas. Cada dispositivo se autoriza automáticamente y todos sincronizan los mismos datos del proyecto Firebase.": "You do not need to create an account or share passwords. Each device is authorized automatically and all devices sync the same Firebase project data.", "Sincronizar ahora": "Sync now", "Esperando la autorización automática de este dispositivo…": "Waiting for this device to be authorized automatically…", "Cómo configurar tu proyecto de Firebase": "How to set up your Firebase project", "Crea un proyecto en console.firebase.google.com y añade una app web para obtener el bloque JSON de configuración.": "Create a project at console.firebase.google.com and add a web app to get the JSON configuration block.", "En Authentication > Método de acceso, activa «Anónimo».": "In Authentication > Sign-in method, enable \"Anonymous\".", "En Firestore Database, crea la base de datos y sustituye las reglas por estas:": "In Firestore Database, create the database and replace the rules with these:", "Pega el JSON en este panel y pulsa «Guardar y Conectar Firebase». La aplicación autorizará este dispositivo automáticamente.": "Paste the JSON in this panel and click \"Save and Connect Firebase\". The app will authorize this device automatically.", "Firebase Conectado": "Firebase Connected", "Firebase conectado · Sin iniciar sesión": "Firebase connected · Not signed in", "Sincronizado": "Synced", "Error de sincronización": "Sync error", "Esperando la autorización automática de este dispositivo…": "Waiting for this device to be authorized automatically…", "Sincronizando…": "Syncing…", "Los datos superan el límite de sincronización (1 MB).": "Your data exceeds the sync limit (1 MB).", "Los datos de la nube no son válidos.": "The cloud data is not valid.", "Demasiados intentos. Inténtalo más tarde.": "Too many attempts. Try again later.", "Sin conexión. Comprueba tu red.": "No connection. Check your network.", "Se han encontrado datos de esta cuenta en la nube. Aceptar = cargarlos en este dispositivo (sustituye los datos locales). Cancelar = subir los datos de este dispositivo a la nube.": "Data for this account was found in the cloud. OK = load it on this device (replaces local data). Cancel = upload this device's data to the cloud."};
+    const DICT = {"-- Seleccionar Equipo --": "-- Select Printer --", "-- Selección Manual / Genérica --": "-- Manual / Generic Selection --", "1 Año (12 Meses)": "1 Year (12 Months)", "1. Equipo, Duración y Volúmenes": "1. Printer, Term and Volumes", "1. Especificaciones Principales": "1. Main Specifications", "1. Parque Actual del Cliente": "1. Customer's Current Fleet", "2. Consumibles Monocromo (K)": "2. Monochrome Supplies (K)", "2. Precio Equipo y Renting": "2. Equipment Price and Rental", "2. Propuesta de Tu Catálogo": "2. Proposal from Your Catalog", "3 Años (36 Meses)": "3 Years (36 Months)", "3. Consumibles Color (C, M, Y)": "3. Color Supplies (C, M, Y)", "3. Coste Técnico y PVP (€ Sin IVA)": "3. Technical Cost and Retail Price (€ excl. VAT)", "5 Años (60 Meses)": "5 Years (60 Months)", "Abre directamente la interfaz de Gmail": "Opens the Gmail interface directly", "Abre la ventana de redacción de Outlook Web": "Opens the Outlook Web compose window", "Acciones": "Actions", "Ahorro Estimado Anual": "Estimated Annual Savings", "Ahorro Neto (€)": "Net Savings (€)", "Ahorro positivo mensual": "Positive monthly savings", "Ajustar a Márgenes Positivos (+40%)": "Adjust to Positive Margins (+40%)", "Ajustes": "Settings", "Ajustes y Respaldo": "Settings and Backup", "Amortización / ROI": "Payback / ROI", "Amortización Equipo:": "Equipment Payback:", "Anual": "Annual", "Anual Con IVA": "Annual incl. VAT", "Auditoría de Parque y Simulador de Ahorro": "Fleet Audit and Savings Simulator", "Auditoría y Ahorro": "Audit and Savings", "Av. Principal N.12": "12 Main Ave.", "Añadir Impresora": "Add Printer", "Añadir Máquina": "Add Machine", "Añadir Nueva Impresora": "Add New Printer", "BENEFICIO NETO COPIAS:": "NET PROFIT ON COPIES:", "BENEFICIO NETO EQUIPO:": "NET PROFIT ON EQUIPMENT:", "BENEFICIO NETO TOTAL:": "TOTAL NET PROFIT:", "Beneficio Total": "Total Profit", "Bote": "Waste Box", "Bote Residuo": "Waste Box", "Bote de Residuo": "Waste Box", "Botes de Residuo": "Waste Boxes", "Buscar por consumible o modelo de impresora...": "Search by supply or printer model...", "Buscar por marca o modelo...": "Search by brand or model...", "CARACTERÍSTICA / MÉTRICA": "FEATURE / METRIC", "CIF / NIF": "Tax ID", "Calculadora": "Calculator", "Calculadora Comercial": "Sales Calculator", "Calculadora Comercial MPS": "MPS Sales Calculator", "Calculadora Comercial y Análisis de Márgenes": "Sales Calculator and Margin Analysis", "Calculadora MPS": "MPS Calculator", "Cancelar": "Cancel", "Cargar Archivo JSON": "Load JSON File", "Cargar Modelo del Catálogo": "Load Model from Catalog", "Cargar en Calculadora MPS": "Load into MPS Calculator", "Cargar en Comparador MPS": "Load into MPS Comparator", "Catálogo": "Catalog", "Catálogo General": "General Catalog", "Catálogo de Impresoras y Fichas Técnicas": "Printer Catalog and Data Sheets", "Cerrar": "Close", "Cierre de Ventas por TCO": "Close Sales with TCO", "Clasificación diferenciada por tecnología (Color / Monocromo) y función (Multifunción / Impresora).": "Classified by technology (Color / Monochrome) and function (Multifunction / Printer).", "Cliente / Empresa": "Customer / Company", "Cliente por defecto (Mailto)": "Default email app (Mailto)", "Color": "Color", "Color • Formato A3": "Color • A3 Format", "Comparador": "Comparator", "Comparador Cara a Cara de Impresoras": "Side-by-Side Printer Comparator", "Comparativa de Costes por Página (€ Sin IVA)": "Cost per Page Comparison (€ excl. VAT)", "Componente / Consumible": "Component / Supply", "Concepto": "Item", "Configura el equipo, precios, renting y PVP con control total de márgenes.": "Set up the printer, prices, rental and retail price with full margin control.", "Configuración API de Firebase (JSON Completo)": "Firebase API Configuration (Full JSON)", "Consulta los precios de compra, costes técnicos prorrateados sin IVA o añade nuevos modelos.": "Check purchase prices, prorated technical costs excl. VAT, or add new models.", "Consumible": "Supply", "Consumible / Componente": "Supply / Component", "Consumibles": "Supplies", "Contrato": "Contract", "Contrato (Meses)": "Contract (Months)", "Copia de Seguridad e Importación": "Backup and Import", "Correa": "Belt", "Correa Transferencia": "Transfer Belt", "Correa de Transferencia": "Transfer Belt", "Correas de Transferencia": "Transfer Belts", "Coste / Pág (€)": "Cost / Page (€)", "Coste / Página (€)": "Cost / Page (€)", "Coste B/N:": "B/W Cost:", "Coste Parque Actual": "Current Fleet Cost", "Coste Técnico B/N": "B/W Technical Cost", "Coste Técnico B/N (Sin IVA)": "B/W Technical Cost (excl. VAT)", "Coste Técnico B/N (€/pág)": "B/W Technical Cost (€/page)", "Coste Técnico Color": "Color Technical Cost", "Coste Técnico Color (Sin IVA)": "Color Technical Cost (excl. VAT)", "Coste Técnico Color (€/pág)": "Color Technical Cost (€/page)", "Coste Técnico Total:": "Total Technical Cost:", "Coste copia B/N (€)": "B/W cost per copy (€)", "Coste copia Color (€)": "Color cost per copy (€)", "Costes Totales (Sin IVA):": "Total Costs (excl. VAT):", "Crear Nuevo Presupuesto": "Create New Quote", "Cuota Renting": "Rental Fee", "Cuota/Renting (€/mes/ud)": "Rental Fee (€/month/unit)", "Cálculo dinámico": "Live calculation", "DESGLOSE 1: SERVICIO POR COPIA": "BREAKDOWN 1: PER-COPY SERVICE", "DESGLOSE 2: EQUIPO Y RENTING": "BREAKDOWN 2: EQUIPMENT AND RENTAL", "Dashboard": "Dashboard", "Dashboard General": "General Dashboard", "Demuestra al cliente cuánto ahorra sustituyendo su parque actual por tus soluciones del catálogo.": "Show the customer how much they save by replacing their current fleet with solutions from your catalog.", "Descargar PDF": "Download PDF", "Desconectar": "Disconnect", "Desglose Técnico de Consumibles y Piezas": "Technical Breakdown of Supplies and Parts", "Desglose de Impuestos (IVA 21%)": "Tax Breakdown (VAT 21%)", "Detalle del Presupuesto Comercial": "Commercial Quote Details", "Dirección / Ubicación": "Address / Location", "Ej. 22.000": "E.g. 22,000", "Ej. Empresa Gráfica S.L.": "E.g. Graphic Company Ltd.", "Ej. Incluye instalación y soporte...": "E.g. Includes installation and support...", "Ej. Lexmark, HP, Kyocera": "E.g. Lexmark, HP, Kyocera", "Ej. Tóner Negro de Alta Capacidad": "E.g. High-Capacity Black Toner", "Ej. XC9525": "E.g. XC9525", "Ej: Ricoh MP2001 en alquiler": "E.g. Ricoh MP2001 rented", "El PVP ofrecido está por debajo del coste técnico o la cuota de Renting no cubre el coste del equipo.": "The offered retail price is below the technical cost, or the rental fee does not cover the equipment cost.", "El PVP por copia se autocompleta con el coste calculado de cada modelo de tu catálogo; puedes ajustarlo manualmente.": "The retail price per copy is auto-filled with the calculated cost of each model in your catalog; you can adjust it manually.", "Eliminar Consumible": "Delete Supply", "Eliminar máquina": "Remove machine", "Eliminar Presupuesto": "Delete Quote", "Email del Cliente *": "Customer Email *", "Enviar Presupuesto por Email": "Send Quote by Email", "Enviar por Correo": "Send by Email", "Enviar por Email (Gmail / Outlook)": "Send by Email (Gmail / Outlook)", "Equipo 1": "Printer 1", "Equipo 2": "Printer 2", "Equipo 3": "Printer 3", "Equipo 4": "Printer 4", "Equipo Asociado": "Linked Printer", "Equipo Asociado *": "Linked Printer *", "Equipos en Catálogo": "Printers in Catalog", "Explorar Catálogo": "Browse Catalog", "Exportar Catálogo JSON": "Export Catalog JSON", "Exportar JSON": "Export JSON", "Exportar PDF Cliente": "Export Customer PDF", "Facturación Copias B/N:": "B/W Copies Billing:", "Facturación Copias Color:": "Color Copies Billing:", "Facturación Mensual": "Monthly Billing", "Facturación Total (Sin IVA):": "Total Billing (excl. VAT):", "Fecha": "Date", "Ficha": "Data Sheet", "Ficha Técnica Detallada": "Detailed Data Sheet", "Formato": "Format", "Formato A3": "A3 Format", "Formato A4": "A4 Format", "Función": "Function", "Fusor": "Fuser", "Gasto Actual (Año)": "Current Spend (Year)", "Gasto mensual": "Monthly spend", "Gestión Inteligente de Impresión y Márgenes": "Smart Print and Margin Management", "Gestión MPS, Calculadora y Simulador TCO": "MPS Management, Calculator and TCO Simulator", "Gestión de Consumibles": "Supplies Management", "Gestor de Consumibles y Recambios": "Supplies and Spare Parts Manager", "Gestor de ofertas →": "Quote manager →", "Gmail (Web)": "Gmail (Web)", "Guardar Consumible": "Save Supply", "Guardar Impresora": "Save Printer", "Guardar Presupuesto": "Save Quote", "Guardar Presupuesto Comercial": "Save Commercial Quote", "Guardar y Conectar Firebase": "Save and Connect Firebase", "Herramienta de Auditoría y Cierre Financiero": "Audit and Financial Closing Tool", "Historial de Presupuestos": "Quote History", "Impacto visual de ahorro:": "Visual savings impact:", "Importar JSON": "Import JSON", "Impresora": "Printer", "Impresora (A4)": "Printer (A4)", "Impresora (Solo Impresión)": "Printer (Print Only)", "Impresora • Formato A4 • Color": "Printer • A4 Format • Color", "Impresora • Monocromo (A4)": "Printer • Monochrome (A4)", "Imprimir": "Print", "Imprimir Directamente": "Print Directly", "Incluye renting previo, tóneres sueltos, mantenimiento y reparaciones de todo el parque actual del cliente.": "Includes previous rental, loose toners, maintenance and repairs for the customer's entire current fleet.", "Ingresos Renting / Venta:": "Rental / Sales Revenue:", "Inmediata": "Immediate", "Inmediato": "Immediate", "Introduce todo el parque de impresoras actual del cliente (con sus costes reales) y la propuesta completa de tu catálogo para calcular el ahorro total, máquina a máquina.": "Enter the customer's entire current printer fleet (with real costs) and the full proposal from your catalog to calculate total savings, machine by machine.", "Kit Fusor": "Fuser Kit", "Kits Fusores": "Fuser Kits", "Limpiar Selección": "Clear Selection", "Marca": "Brand", "Matriz Comparativa de Retorno de Inversión (ROI)": "ROI Comparison Matrix", "Matriz ROI": "ROI Matrix", "Menor Coste B/N (Sin IVA)": "Lowest B/W Cost (excl. VAT)", "Menor Coste Color (Sin IVA)": "Lowest Color Cost (excl. VAT)", "Mensual": "Monthly", "Mensual Con IVA": "Monthly incl. VAT", "Modelo": "Model", "Modelo / Referencia": "Model / Reference", "Modelo Impresora": "Printer Model", "Modelo Propuesto": "Proposed Model", "Modelo de Impresora:": "Printer Model:", "Modifica o elimina recambios, ajusta rendimientos y costes técnicos prorrateados.": "Edit or delete spare parts, adjust yields and prorated technical costs.", "Modificar Consumible": "Edit Supply", "Monocromo": "Monochrome", "Monocromo (B/N)": "Monochrome (B/W)", "Monocromo • A4": "Monochrome • A4", "Monocromo • Formato A3": "Monochrome • A3 Format", "Monocromo • Formato A4": "Monochrome • A4 Format", "Muestra gráfica de la brecha financiera entre mantener el parque actual vs implementar la propuesta completa.": "Chart of the financial gap between keeping the current fleet and implementing the full proposal.", "Multifunción": "Multifunction", "Multifunción (A4)": "Multifunction (A4)", "Multifunción • Color (A3)": "Multifunction • Color (A3)", "Multifunción • Monocromo (A4)": "Multifunction • Monochrome (A4)", "N/A Monocromo": "N/A Monochrome", "No hay presupuestos guardados aún. Genera uno desde la Calculadora MPS.": "No saved quotes yet. Create one from the MPS Calculator.", "Nombre / Empresa del Cliente *": "Customer Name / Company *", "Nombre del Consumible *": "Supply Name *", "Nueva Impresora": "New Printer", "Nuevo Consumible": "New Supply", "OTRAS POSICIONES DEL RANKING (4º AL 10º)": "OTHER RANKING POSITIONS (4TH TO 10TH)", "Observaciones": "Notes", "Observaciones:": "Notes:", "Outlook / Office 365 (Web)": "Outlook / Office 365 (Web)", "PVP Ofrecido B/N (€/pág)": "Offered B/W Retail Price (€/page)", "PVP Ofrecido Color (€/pág)": "Offered Color Retail Price (€/page)", "PVP Ofrecido (€/pág)": "Offered Retail Price (€/page)", "PVP copia B/N (€)": "B/W retail price per copy (€)", "PVP copia Color (€)": "Color retail price per copy (€)", "Panel de Control MPS v2.0": "MPS Control Panel v2.0", "Parque Completo": "Full Fleet", "Pega directamente el bloque JSON de Firebase proporcionado por la consola.": "Paste the Firebase JSON block provided by the console directly.", "Pegar Objeto JSON de Configuración *": "Paste Configuration JSON Object *", "Periodo": "Period", "Plazo amortización:": "Payback period:", "Precio (€)": "Price (€)", "Precio Compra (€)": "Purchase Price (€)", "Precio Compra Máquina": "Machine Purchase Price", "Precio Compra Máquina (Sin IVA)": "Machine Purchase Price (excl. VAT)", "Precio Compra Máquina (€ Sin IVA)": "Machine Purchase Price (€ excl. VAT)", "Precio Máquina:": "Machine Price:", "Precio Sin IVA (€)": "Price excl. VAT (€)", "Precio Sin IVA (€) *": "Price excl. VAT (€) *", "Precio Venta (€)": "Sale Price (€)", "Presupuestos": "Quotes", "Presupuestos Guardados": "Saved Quotes", "Presupuestos y Ofertas Guardadas": "Saved Quotes and Offers", "Probar Conexión": "Test Connection", "Propuesta Tu Catálogo": "Your Catalog Proposal", "Proyección Visual del Gasto Acumulado (TCO)": "Visual Projection of Cumulative Spend (TCO)", "RESUMEN GLOBAL (COPIAS + EQUIPO)": "GLOBAL SUMMARY (COPIES + EQUIPMENT)", "Ranking Top 10 Menor Coste por Copia": "Top 10 Ranking: Lowest Cost per Copy", "Rend. (Pag)": "Yield (Pg)", "Rendimiento (Pag)": "Yield (Pg)", "Rendimiento (Páginas) *": "Yield (Pages) *", "Renting (€/mes/ud)": "Rental (€/month/unit)", "Renting Mensual (€)": "Monthly Rental (€)", "Restablecer": "Reset", "Restablecer Catálogo BSD Noviembre 2026": "Restore Default Demo Catalog", "Selecciona hasta 4 modelos para comparar precios, consumibles, volúmenes recomendados y costes por copia.": "Select up to 4 models to compare prices, supplies, recommended volumes and cost per copy.", "Selecciona la plataforma con la que deseas redactar y enviar este presupuesto a": "Choose the platform to write and send this quote to", "Simulador TCO y ROI": "TCO and ROI Simulator", "Simulador de Ahorro ROI": "ROI Savings Simulator", "Simular Ahorro Financiero": "Simulate Financial Savings", "Sistema optimizado con generación de PDF e impresión 100% garantizada, integración directa de correos web y simulador de ahorro TCO para cierre de ventas.": "Optimized system with PDF generation and guaranteed printing, direct web email integration and a TCO savings simulator to close sales.", "TCO actual de todo el parque auditado": "Current TCO of the entire audited fleet", "TOTAL GASTO MENSUAL ACTUAL": "TOTAL CURRENT MONTHLY SPEND", "TOTAL GASTO MENSUAL PROPUESTO": "TOTAL PROPOSED MONTHLY SPEND", "Tambor": "Drum", "Tambor / Drum": "Drum", "Tambor Amarillo (Y)": "Yellow Drum (Y)", "Tambor Cian (C)": "Cyan Drum (C)", "Tambor Magenta (M)": "Magenta Drum (M)", "Tambor Negro (K)": "Black Drum (K)", "Tambores / Drums": "Drums", "Teléfono Contacto": "Contact Phone", "Teléfono:": "Phone:", "Tipo": "Type", "Tipo Impresión": "Print Type", "Tipo de Componente *": "Component Type *", "Tipo de Impresión": "Print Type", "Todas las Funciones": "All Functions", "Todos los formatos (A4 / A3)": "All formats (A4 / A3)", "Todos los tipos": "All types", "Todos los tipos (Color / Mono)": "All types (Color / Mono)", "Top 10": "Top 10", "Top 10 Menor Coste": "Top 10 Lowest Cost", "Top Color": "Top Color", "Top Monocromo (B/N)": "Top Monochrome (B/W)", "Top equipos más eficientes en B/N y Color": "Most efficient printers in B/W and Color", "Total Contrato Con IVA": "Total Contract incl. VAT", "Total Facturación Copias:": "Total Copies Billing:", "Totales Globales": "Global Totals", "Tóner": "Toner", "Tóner Amarillo (Y)": "Yellow Toner (Y)", "Tóner Cian (C)": "Cyan Toner (C)", "Tóner Magenta (M)": "Magenta Toner (M)", "Tóner Negro (K)": "Black Toner (K)", "Tóners": "Toners", "Uds": "Units", "Vaciar Base de Datos": "Clear Database", "Vaciar Datos": "Clear Data", "Ver Comparador": "View Comparator", "Ver Detalle": "View Details", "Ver todo el catálogo →": "View full catalog →", "Visualiza presupuestos, descárgalos en PDF formateado o envíalos directamente por correo web (Gmail / Outlook).": "View quotes, download them as formatted PDF or send them directly by web email (Gmail / Outlook).", "Vol. B/N": "B/W Vol.", "Vol. Color": "Color Vol.", "Vol. Máximo:": "Max Vol.:", "Vol. Mínimo:": "Min Vol.:", "Volumen B/N": "B/W Volume", "Volumen Color": "Color Volume", "Volumen Mensual B/N": "Monthly B/W Volume", "Volumen Mensual Color": "Monthly Color Volume", "Volumen Mensual Incluido": "Monthly Volume Included", "Volumen Máximo Mensual": "Maximum Monthly Volume", "Volumen Máximo Recomendado": "Recommended Maximum Volume", "Volumen Mínimo Mensual": "Minimum Monthly Volume", "Volumen Mínimo Recomendado": "Recommended Minimum Volume", "¡Atención! El Beneficio del Presupuesto es Negativo": "Warning! The quote profit is negative", "← Volver / Atrás": "← Back", "/ pág": "/ page", "Blanco y Negro (Monocromo)": "Black and White (Monochrome)", "CIF / NIF:": "Tax ID:", "COPIAS INCLUIDAS Y PRECIO POR PÁGINA": "INCLUDED COPIES AND PRICE PER PAGE", "Cliente / Empresa:": "Customer / Company:", "Cuota de Renting Mensual:": "Monthly Rental Fee:", "DATOS DEL CLIENTE": "CUSTOMER DETAILS", "Dirección:": "Address:", "Duración del Contrato:": "Contract Term:", "EQUIPO Y CONDICIONES DEL RENTING": "EQUIPMENT AND RENTAL TERMS", "Email:": "Email:", "PRESUPUESTO COMERCIAL MPS": "MPS COMMERCIAL QUOTE", "Gmail": "Gmail", "Coste B/N (€)": "B/W Cost (€)", "Coste Color (€)": "Color Cost (€)", "1 Año": "1 Year", "2 Años": "2 Years", "3 Años": "3 Years", "4 Años": "4 Years", "5 Años": "5 Years", "Gasto Parque Actual (€)": "Current Fleet Spend (€)", "Propuesta Tu Catálogo (€)": "Your Catalog Proposal (€)", "Sin ahorro": "No savings", "PrintCost Pro - Gestor MPS, Calculadora y Simulador TCO": "PrintCost Pro - MPS Manager, Calculator and TCO Simulator", "Por favor, pega el bloque JSON con la configuración de tu proyecto Firebase.": "Please paste the JSON block with your Firebase project configuration.", "El JSON introducido no contiene los campos obligatorios \"apiKey\" y \"projectId\".": "The JSON entered does not contain the required \"apiKey\" and \"projectId\" fields.", "¡Configuración de Firebase guardada y conectada correctamente!": "Firebase configuration saved and connected successfully!", "El texto introducido no es un objeto JSON válido.": "The text entered is not a valid JSON object.", "¿Deseas eliminar la configuración de Firebase y volver a LocalStorage local?": "Do you want to remove the Firebase configuration and go back to local storage?", "Firebase desconectado.": "Firebase disconnected.", "Primero debes guardar la configuración JSON de Firebase.": "You must save the Firebase JSON configuration first.", "¡Conexión con Firebase establecida correctamente!": "Firebase connection established successfully!", "No se pudo inicializar Firebase.": "Could not initialize Firebase.", "¡Presupuesto guardado correctamente!": "Quote saved successfully!", "¿Deseas eliminar este presupuesto?": "Do you want to delete this quote?", "¿Deseas eliminar este consumible del equipo asociándolo a 0 € y 0 pág?": "Do you want to remove this supply from the printer by setting it to €0 and 0 pages?", "¿Deseas eliminar esta impresora?": "Do you want to delete this printer?", "¡Catálogo cargado!": "Catalog loaded!", "Error al leer el JSON.": "Error reading the JSON.", "¿Vaciar toda la base de datos de impresoras?": "Clear the entire printer database?", "¿Restablecer las 36 impresoras de la Tarifa BSD Noviembre 2026?": "Restore the default demo catalog?", "Se ha activado el visor de impresión nativo. Selecciona 'Guardar como PDF'.": "The native print viewer has been opened. Select 'Save as PDF'.", "Sin especificar": "Not specified", "Personalización de PDF y Email": "PDF and Email Customization", "Estos datos se usan en la cabecera del PDF del presupuesto y en los emails que envías a tus clientes. El nombre y el contacto de la empresa empiezan vacíos y no aparecen hasta que los rellenes; en los demás campos, si lo dejas vacío se usa el texto por defecto.": "This information is used in the header of the quote PDF and in the emails you send to your customers. Company name and contact start empty and do not appear until you fill them in; for the other fields, leaving them empty uses the default text.", "Nombre de la empresa (PDF y firma)": "Company name (PDF and signature)", "Línea de contacto del PDF (email, teléfono, ciudad...)": "PDF contact line (email, phone, city...)", "Nota al pie del PDF (opcional)": "PDF footer note (optional)", "Asunto del email": "Email subject", "Introducción del email": "Email introduction", "Despedida del email": "Email closing", "Firma del email": "Email signature", "Puedes usar {cliente}, {equipo} y {empresa} en los textos del email.": "You can use {cliente}, {equipo} and {empresa} in the email texts.", "Guardar Personalización": "Save Customization", "Restablecer Valores por Defecto": "Restore Defaults", "¡Personalización guardada!": "Customization saved!", "Valores por defecto restaurados.": "Defaults restored.", "¿Restablecer los textos del PDF y del email a los valores por defecto?": "Restore the PDF and email texts to their default values?", "Sincronizar mis datos entre dispositivos": "Sync my data across devices", "Después de conectar Firebase, inicia sesión (o crea una cuenta) con tu email y contraseña. Usa la misma cuenta en cada dispositivo y tu catálogo, presupuestos y auditorías se mantendrán sincronizados.": "After connecting Firebase, sign in (or create an account) with your email and password. Use the same account on every device and your catalog, quotes and audits will stay in sync.", "Email de la cuenta": "Account email", "Contraseña": "Password", "Iniciar sesión": "Sign in", "Crear cuenta": "Create account", "Sincronizar ahora": "Sync now", "Cerrar sesión": "Sign out", "Aún no has iniciado sesión.": "You are not signed in yet.", "Cómo configurar tu proyecto de Firebase": "How to set up your Firebase project", "Crea un proyecto en console.firebase.google.com y añade una app web para obtener el bloque JSON de configuración.": "Create a project at console.firebase.google.com and add a web app to get the JSON configuration block.", "En Authentication, activa el método «Correo electrónico/contraseña».": "In Authentication, enable the \"Email/Password\" sign-in method.", "En Firestore Database, crea la base de datos y pega estas reglas de seguridad:": "In Firestore Database, create the database and paste these security rules:", "Pega el JSON en este panel, pulsa «Guardar y Conectar Firebase» e inicia sesión.": "Paste the JSON in this panel, click \"Save and Connect Firebase\" and sign in.", "Firebase Conectado": "Firebase Connected", "Firebase conectado · Sin iniciar sesión": "Firebase connected · Not signed in", "Sincronizado": "Synced", "Error de sincronización": "Sync error", "Conectado a Firebase. Inicia sesión para sincronizar.": "Connected to Firebase. Sign in to sync.", "Sincronizando…": "Syncing…", "Conectando…": "Connecting…", "Sesión cerrada. Los datos siguen guardados en este dispositivo.": "Signed out. Your data remains saved on this device.", "Los datos superan el límite de sincronización (1 MB).": "Your data exceeds the sync limit (1 MB).", "Los datos de la nube no son válidos.": "The cloud data is not valid.", "Email o contraseña incorrectos.": "Incorrect email or password.", "Ese email ya tiene cuenta. Inicia sesión.": "This email already has an account. Sign in.", "La contraseña debe tener al menos 6 caracteres.": "The password must be at least 6 characters.", "Activa el método «Correo electrónico/contraseña» en Firebase Authentication.": "Enable the \"Email/Password\" method in Firebase Authentication.", "Email no válido.": "Invalid email.", "Demasiados intentos. Inténtalo más tarde.": "Too many attempts. Try again later.", "Sin conexión. Comprueba tu red.": "No connection. Check your network.", "Primero guarda y conecta la configuración de Firebase.": "First save and connect your Firebase configuration.", "Introduce tu email y contraseña.": "Enter your email and password.", "Inicia sesión primero.": "Sign in first.", "Se han encontrado datos de esta cuenta en la nube. Aceptar = cargarlos en este dispositivo (sustituye los datos locales). Cancelar = subir los datos de este dispositivo a la nube.": "Data for this account was found in the cloud. OK = load it on this device (replaces local data). Cancel = upload this device's data to the cloud."};
     const KEY = 'printcost_lang';
     const TYPE = { 'Monocromo': 'Monochrome', 'Color': 'Color' };
     const state = { lang: (localStorage.getItem(KEY) === 'en') ? 'en' : 'es' };
@@ -5597,304 +5436,3 @@ service cloud.firestore {
 
 </body>
 </html>
-<script id="printcost-minimal-firebase-settings-ui">
-(function () {
-    const syncTitle = 'Sincronizar mis datos entre dispositivos';
-    const backupTitle = 'Copia de Seguridad e Importación';
-    const excludedKeys = new Set([
-        'printcost_firebase_config',
-        'printcost_firebase_config_backup',
-        'printcost_cloud_meta',
-        'printcost_device_id'
-    ]);
-    let scheduled = false;
-
-    function cleanText(value) {
-        return String(value || '').replace(/\s+/g, ' ').trim();
-    }
-
-    function findTitle(title) {
-        const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,h6,[role="heading"]'));
-        return headings.find(el => cleanText(el.textContent) === title) || null;
-    }
-
-    function findCard(heading, expectedText) {
-        let node = heading && heading.parentElement;
-        for (let depth = 0; node && node !== document.body && depth < 12; depth++, node = node.parentElement) {
-            const text = cleanText(node.textContent);
-            if (text.includes(expectedText) && !text.includes('Configuración API de Firebase (JSON Completo)')) {
-                const classes = typeof node.className === 'string' ? node.className : '';
-                if (/(?:^|\s)rounded-(?:lg|xl|2xl)(?:\s|$)/.test(classes) ||
-                    (node.matches && node.matches('section,article'))) return node;
-            }
-        }
-        return heading ? heading.parentElement : null;
-    }
-
-    function hideSyncPanel() {
-        const heading = findTitle(syncTitle);
-        if (!heading) return;
-        const panel = findCard(heading, syncTitle);
-        if (panel && !panel.querySelector('#firebase-json-input')) {
-            panel.style.display = 'none';
-            panel.setAttribute('aria-hidden', 'true');
-        }
-    }
-
-    function downloadJson(filename, payload) {
-        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
-    }
-
-    function makeFullBackup() {
-        const data = {};
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.startsWith('printcost_') && !excludedKeys.has(key)) {
-                data[key] = localStorage.getItem(key);
-            }
-        }
-        downloadJson('printcostpro-copia-seguridad-' + new Date().toISOString().slice(0, 10) + '.json', {
-            app: 'PrintCost Pro',
-            type: 'printcostpro-full-backup',
-            version: 1,
-            createdAt: new Date().toISOString(),
-            data: data
-        });
-        alert('Copia de seguridad completa creada correctamente.');
-    }
-
-    async function restoreFullBackup(file) {
-        try {
-            const raw = await file.text();
-            const backup = JSON.parse(raw);
-            if (!backup || backup.app !== 'PrintCost Pro' ||
-                backup.type !== 'printcostpro-full-backup' ||
-                !backup.data || typeof backup.data !== 'object' || Array.isArray(backup.data)) {
-                throw new Error('El archivo no es una copia de seguridad completa de PrintCost Pro.');
-            }
-            if (!confirm('Restaurar esta copia sustituirá los datos actuales de este dispositivo. ¿Deseas continuar?')) return;
-            Object.keys(backup.data).forEach(function (key) {
-                if (key.startsWith('printcost_') && !excludedKeys.has(key) && typeof backup.data[key] === 'string') {
-                    localStorage.setItem(key, backup.data[key]);
-                }
-            });
-            if (window.__cloudSync && window.__cloudSync.push) await window.__cloudSync.push(true);
-            alert('Copia de seguridad restaurada correctamente. Se actualizará la aplicación.');
-            location.reload();
-        } catch (e) {
-            alert('No se pudo restaurar la copia de seguridad: ' + (e.message || e));
-        }
-    }
-
-    function findVaciarButton() {
-        return Array.from(document.querySelectorAll('button')).find(function (button) {
-            return /^(Vaciar Datos|Vaciar base de datos)$/i.test(cleanText(button.textContent));
-        }) || null;
-    }
-
-    function setupBackupPanel() {
-        const heading = findTitle(backupTitle);
-        if (!heading) return;
-        const panel = findCard(heading, backupTitle) || heading.parentElement;
-        if (!panel) return;
-
-        let tools = panel.querySelector('#printcost-full-backup-tools');
-        if (!tools) {
-            tools = document.createElement('div');
-            tools.id = 'printcost-full-backup-tools';
-            tools.className = 'mt-3 mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3';
-            tools.innerHTML = '<p class="font-bold text-slate-800 mb-1">Copia de seguridad completa</p>' +
-                '<p class="text-xs text-slate-600 mb-3">Guarda catálogos, presupuestos, auditorías y ajustes de empresa en un archivo JSON. La configuración y la sesión de Firebase no se incluyen.</p>' +
-                '<div class="flex flex-wrap items-center gap-2">' +
-                '<button type="button" id="printcost-create-full-backup" class="bg-brand-600 hover:bg-brand-700 text-white font-bold px-4 py-2 rounded-lg text-xs">Hacer copia de seguridad</button>' +
-                '<label for="printcost-restore-full-backup" class="bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold px-4 py-2 rounded-lg text-xs cursor-pointer">Restaurar copia de seguridad</label>' +
-                '<input type="file" id="printcost-restore-full-backup" accept=".json,application/json" class="hidden">' +
-                '</div>';
-            heading.insertAdjacentElement('afterend', tools);
-            tools.querySelector('#printcost-create-full-backup').addEventListener('click', makeFullBackup);
-            tools.querySelector('#printcost-restore-full-backup').addEventListener('change', function (event) {
-                const file = event.target.files && event.target.files[0];
-                if (file) restoreFullBackup(file);
-                event.target.value = '';
-            });
-        }
-
-        const vaciar = findVaciarButton();
-        if (vaciar && !vaciar.dataset.printcostDoubleConfirm) {
-            vaciar.dataset.printcostDoubleConfirm = '1';
-            vaciar.textContent = 'Vaciar base de datos';
-            vaciar.setAttribute('onclick', 'return window.clearPrintCostDatabase()');
-            vaciar.addEventListener('click', function (event) {
-                event.preventDefault();
-                event.stopImmediatePropagation();
-                window.clearPrintCostDatabase();
-            }, true);
-        }
-    }
-
-    function update() {
-        hideSyncPanel();
-        setupBackupPanel();
-    }
-
-    function schedule() {
-        if (scheduled) return;
-        scheduled = true;
-        requestAnimationFrame(function () {
-            scheduled = false;
-            update();
-        });
-    }
-
-    update();
-    if (document.documentElement) {
-        const observer = new MutationObserver(schedule);
-        observer.observe(document.documentElement, { childList: true, subtree: true });
-    }
-})();
-</script>
-
-<script id="printcost-firebase-config-autorestore">
-(function () {
-    if (window.__printcostFirebaseAutoRestoreInstalled) return;
-    window.__printcostFirebaseAutoRestoreInstalled = true;
-    let started = false;
-    let fieldRestoreRunning = false;
-
-    async function restoreSavedConfigInField() {
-        if (fieldRestoreRunning) return;
-        const input = document.getElementById('firebase-json-input');
-        if (!input || input.value.trim()) return;
-        fieldRestoreRunning = true;
-        try {
-            let raw = null;
-            try { raw = localStorage.getItem('printcost_firebase_config'); } catch (e) {}
-            if (!raw) {
-                try {
-                    const cookie = document.cookie.split(';').map(v => v.trim()).find(v => v.startsWith('printcost_firebase_config_backup='));
-                    if (cookie) raw = decodeURIComponent(cookie.slice('printcost_firebase_config_backup='.length));
-                } catch (e) {}
-            }
-            if (!raw && window.indexedDB) {
-                try {
-                    const request = indexedDB.open('printcostpro_settings_v1', 1);
-                    raw = await new Promise((resolve, reject) => {
-                        request.onsuccess = () => {
-                            const db = request.result;
-                            const tx = db.transaction('settings', 'readonly');
-                            const get = tx.objectStore('settings').get('printcost_firebase_config');
-                            get.onsuccess = () => { const value = get.result || null; db.close(); resolve(value); };
-                            get.onerror = () => { const error = get.error; db.close(); reject(error); };
-                        };
-                        request.onerror = () => reject(request.error);
-                    });
-                } catch (e) {}
-            }
-            if (raw && input.isConnected && !input.value.trim()) {
-                const cfg = JSON.parse(raw);
-                if (cfg && cfg.apiKey && cfg.projectId) input.value = JSON.stringify(cfg, null, 2);
-            }
-        } catch (e) { console.warn('No se pudo rellenar el campo con la configuración Firebase guardada:', e); }
-        finally { fieldRestoreRunning = false; }
-    }
-
-
-    function setLocalMode(message) {
-        const b = document.getElementById('firebase-sync-badge');
-        if (b) {
-            b.className = 'bg-amber-100 text-amber-800 border border-amber-300 text-[11px] px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1.5';
-            b.innerHTML = '<i class="fa-solid fa-database"></i> LocalStorage';
-            b.title = 'Modo local: los datos se guardan en este dispositivo.';
-            b.setAttribute('aria-label', 'Modo local');
-        }
-        const status = document.getElementById('cloud-sync-status');
-        if (status) status.textContent = message || 'Modo local. No hay ninguna API de Firebase configurada.';
-        const account = document.getElementById('cloud-sync-account');
-        if (account) account.textContent = '';
-    }
-
-    async function restoreWhenReady() {
-        if (started) return;
-        started = true;
-        try {
-            for (let attempt = 0; attempt < 60; attempt++) {
-                if (window.firebase && firebase.apps &&
-                    typeof window.loadFirebaseSettings === 'function' &&
-                    typeof window.initFirebase === 'function') break;
-                await new Promise(resolve => setTimeout(resolve, 250));
-            }
-            if (!window.firebase || !firebase.apps ||
-                typeof window.loadFirebaseSettings !== 'function' ||
-                typeof window.initFirebase !== 'function') {
-                throw new Error('No se pudo cargar el módulo Firebase. Recarga la aplicación.');
-            }
-
-            let hasSavedConfig = false;
-            try { hasSavedConfig = !!localStorage.getItem('printcost_firebase_config'); } catch (e) {}
-            try { hasSavedConfig = hasSavedConfig || document.cookie.includes('printcost_firebase_config_backup='); } catch (e) {}
-            if (!hasSavedConfig) {
-                try {
-                    const request = indexedDB.open('printcostpro_settings_v1', 1);
-                    hasSavedConfig = await new Promise((resolve, reject) => {
-                        request.onupgradeneeded = () => {
-                            const db = request.result;
-                            if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings');
-                        };
-                        request.onsuccess = () => {
-                            const db = request.result;
-                            const tx = db.transaction('settings', 'readonly');
-                            const get = tx.objectStore('settings').get('printcost_firebase_config');
-                            get.onsuccess = () => { const value = !!get.result; db.close(); resolve(value); };
-                            get.onerror = () => { const error = get.error; db.close(); reject(error); };
-                        };
-                        request.onerror = () => reject(request.error);
-                    });
-                } catch (e) {}
-            }
-            if (!hasSavedConfig) { setLocalMode(); return; }
-
-            await window.loadFirebaseSettings();
-            if (!firebase.apps || !firebase.apps.length) {
-                setLocalMode('Modo local. No se ha podido inicializar Firebase; revisa el JSON de configuración y vuelve a conectarlo desde Ajustes.');
-                return;
-            }
-            if (window.__cloudSync && typeof window.__cloudSync.attach === 'function') {
-                await window.__cloudSync.attach();
-            }
-        } catch (e) {
-            console.error('No se pudo restaurar la configuración Firebase guardada:', e);
-            const status = document.getElementById('cloud-sync-status');
-            if (status) status.textContent = 'La configuración sigue guardada, pero no se pudo iniciar Firebase: ' + (e.message || e);
-        }
-    }
-
-    function launch() {
-        setTimeout(restoreWhenReady, 300);
-        setTimeout(restoreSavedConfigInField, 500);
-        if (document.documentElement) {
-            const observer = new MutationObserver(function () { restoreSavedConfigInField(); });
-            observer.observe(document.documentElement, { childList: true, subtree: true });
-        }
-    }
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', launch, { once: true });
-    } else launch();
-    window.addEventListener('pageshow', function () {
-        let hasSavedConfig = false;
-        try { hasSavedConfig = !!localStorage.getItem('printcost_firebase_config'); } catch (e) {}
-        if (hasSavedConfig && window.firebase && firebase.apps && firebase.apps.length && window.__cloudSync) {
-            window.__cloudSync.attach();
-        } else if (!hasSavedConfig) {
-            setLocalMode();
-        }
-    });
-})();
-</script>
