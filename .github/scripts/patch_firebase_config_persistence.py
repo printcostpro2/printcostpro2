@@ -431,8 +431,9 @@ new_sync = r'''/* ============================================================
             if (d.deviceId === deviceId || (d.updatedAt || 0) <= (m.lastTs || 0)) return;
             applyRemote(d);
         }, function (e) {
-            status('Error de conexión con Firestore: ' + friendly(e), 'err');
-            badge('error');
+            const detail = friendly(e);
+            status('Error de conexión con Firestore: ' + detail, 'err');
+            badge('error', detail);
             scheduleSyncRetry(e);
         });
         timer = setInterval(function () { push(false); }, 3000);
