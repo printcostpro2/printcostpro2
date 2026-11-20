@@ -81,3 +81,63 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRINTCOSTPRO2_B0737 }}
           channelId: live
           projectId: printcostpro2-b0737
+
+      - name: Install Chromium for post-deploy smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm init -y >/dev/null
+          npm install --no-save playwright@1.56.0
+          npx playwright install --with-deps chromium
+
+      - name: Verify the published application in a real browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/printcost-live-smoke.cjs <<'JS'
+          const {chromium}=require('playwright');
+          const crypto=require('crypto');
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            const context=await browser.newContext({viewport:{width:1600,height:1100}});
+            const page=await context.newPage();
+            const pass='PrintCost-Live-Smoke-2026', salt='live-smoke-test';
+            const hash=crypto.createHash('sha256').update(salt+':'+pass).digest('hex');
+            await page.addInitScript(({salt,hash})=>localStorage.setItem('printcost_app_access_v1',JSON.stringify({salt,hash,version:1})),{salt,hash});
+            const errors=[],consoleErrors=[],failed=[],bad=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+            page.on('requestfailed',r=>failed.push(r.url()));
+            page.on('response',r=>{if(r.status()>=400)bad.push({status:r.status(),url:r.url()})});
+            const response=await page.goto('https://printcostpro2-b0737.web.app/?smoke='+Date.now(),{waitUntil:'domcontentloaded',timeout:60000});
+            await page.waitForTimeout(6000);
+            if(response.status()!==200)throw new Error('HTTP '+response.status());
+            await page.locator('#app-unlock-password').fill(pass);
+            await page.locator('#app-lock-screen button[type=submit]').click();
+            await page.waitForFunction(()=>document.getElementById('app-lock-screen').classList.contains('hidden'));
+            const printers=await page.evaluate(()=>JSON.parse(localStorage.getItem('printcost_printers')||'[]').length);
+            if(printers!==36)throw new Error('Se cargaron '+printers+' impresoras, se esperaban 36');
+            const views=[['dashboard','nav-dashboard'],['catalog','nav-catalog'],['comparator','nav-comparator'],['quotes','nav-quotes'],['consumables','nav-consumables'],['top10','nav-top10'],['manualCalc','nav-manualCalc'],['tcoSim','nav-tcoSim'],['settings','nav-settings']];
+            for(const [view,nav] of views){
+              await page.locator('#'+nav).click();
+              if(!await page.locator('#view-'+view).evaluate(e=>!e.classList.contains('hidden')))throw new Error('No abre '+view);
+            }
+            await page.locator('#nav-catalog').click();
+            const pages=await page.locator('#catalog-pagination button').count();
+            if(pages!==6||await page.locator('#catalog-grid>*').count()!==6)throw new Error('Catálogo/paginación incorrectos');
+            await page.locator('#catalog-pagination button').nth(1).click();
+            await page.locator('#nav-comparator').click();
+            if(await page.locator('#comp-select-0 option').count()<37)throw new Error('Comparador incompleto');
+            await page.locator('#nav-manualCalc').click();
+            if(await page.locator('#calc-printer-select option').count()<37)throw new Error('Calculadora incompleta');
+            await page.locator('#nav-settings').click();
+            if(!await page.locator('#firebase-json-input').count())throw new Error('Falta configuración de Firebase');
+            await page.locator('button[onclick="openAddPrinterModal()"]').first().click();
+            if(!await page.locator('#printer-modal').evaluate(e=>!e.classList.contains('hidden')))throw new Error('No abre alta de impresora');
+            await page.locator('#printer-modal button[onclick="closeAddPrinterModal()"]').click();
+            console.log('LIVE_SMOKE_OK',{printers,pages,navigation:views.length,errors,consoleErrors,failed,bad});
+            if(errors.length||consoleErrors.length||failed.length||bad.length)throw new Error('Errores en navegador '+JSON.stringify({errors,consoleErrors,failed,bad}));
+            await browser.close();
+          })().catch(e=>{console.error('LIVE_SMOKE_FAILED',e);process.exit(2)});
+          JS
+          NODE_PATH="$PWD/node_modules" node /tmp/printcost-live-smoke.cjs
