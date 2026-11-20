@@ -262,7 +262,7 @@ auth_new = """        try {
             else await firebase.auth().signInWithEmailAndPassword(email, pass);"""
 if auth_old in html:
     html = html.replace(auth_old, auth_new, 1)
-elif auth_new not in html:
+elif auth_new not in html and "signInAnonymously" not in html:
     raise SystemExit("No se encontró la función de inicio de sesión esperada; despliegue cancelado.")
 
 
@@ -566,9 +566,14 @@ service cloud.firestore {
                         <p class="mt-2">Pega el JSON en este panel y pulsa «Guardar y Conectar Firebase». La aplicación autorizará este dispositivo automáticamente.</p>
                         <p class="mt-2 text-amber-700 font-semibold">Importante: cualquier sesión autenticada en este proyecto puede acceder al documento compartido. Para reforzar la protección, configura también Firebase App Check.</p>
                     </details>'''
-if old_ui not in html:
-    raise SystemExit("No se encontró el panel de sincronización antiguo esperado; despliegue cancelado.")
-html = html.replace(old_ui, new_ui, 1)
+if old_ui in html:
+    html = html.replace(old_ui, new_ui, 1)
+elif "No necesitas crear una cuenta ni compartir contraseñas." not in html:
+    raise SystemExit("No se encontró el panel de sincronización esperado; despliegue cancelado.")
+html = html.replace(
+    "Importante: las reglas permiten el acceso anónimo al documento compartido de este proyecto. No compartas la configuración de tu Firebase con personas ajenas a tus dispositivos.",
+    "Importante: cualquier sesión autenticada en este proyecto puede acceder al documento compartido. Para reforzar la protección, configura también Firebase App Check."
+)
 
 # Actualizar las traducciones del panel al inglés.
 replacements = {
