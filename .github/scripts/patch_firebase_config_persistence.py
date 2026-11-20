@@ -593,7 +593,9 @@ replacements = {
     '"Inicia sesión primero.": "Sign in first.", ': '',
     '"Primero guarda y conecta la configuración de Firebase.": "First save and connect your Firebase configuration.", ': '',
 };
-for (const [a,b] of Object.entries(replacements)) if (html.includes(a)) html=html.replace(a,b);
+for a, b in replacements.items():
+    if a in html:
+        html = html.replace(a, b)
 # Remove obsolete login helpers from translations, if still present.
 html = html.replace('"Sincronizado": "Synced",', '"Sincronizado": "Synced",');
 if (!html.includes("signInAnonymously") || !html.includes("doc(SHARED_DOC)") || !html.includes("documentId == 'shared'")) {
