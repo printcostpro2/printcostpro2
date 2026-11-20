@@ -611,6 +611,159 @@ new_sync = r'''/* ============================================================
     };
 })();'''
 
+
+# PRINT COST PRO: tratar una API inválida como modo local, sin bloquear la aplicación.
+new_sync = new_sync.replace(
+    """    function stop() {
+        if (unsub) { try { unsub(); } catch (e) {} unsub = null; }""",
+    """    function isInvalidApiKey(e) {
+        const code = String((e && e.code) || '').toLowerCase();
+        const message = String((e && e.message) || e || '').toLowerCase();
+        return code.includes('api-key-not-valid') || code.includes('invalid-api-key') ||
+            message.includes('api-key-not-valid') || message.includes('api key not valid') ||
+            message.includes('please pass a valid api key');
+    }
+
+    async function returnToLocalMode(error) {
+        enabled = false;
+        stop();
+        user = null; docRef = null; attached = false; attachPromise = null;
+        if (authRetryTimer) { clearTimeout(authRetryTimer); authRetryTimer = null; }
+        if (syncRetryTimer) { clearTimeout(syncRetryTimer); syncRetryTimer = null; }
+        if (authUnsub) { try { authUnsub(); } catch (e) {} authUnsub = null; }
+        try { localStorage.removeItem('printcost_firebase_config'); } catch (e) {}
+        try { document.cookie = 'printcost_firebase_config_backup=; Max-Age=0; Path=/; SameSite=Lax; Secure'; } catch (e) {}
+        try {
+            if (window.indexedDB) {
+                const db = await new Promise((resolve, reject) => {
+                    const request = indexedDB.open('printcostpro_settings_v1', 1);
+                    request.onsuccess = () => resolve(request.result);
+                    request.onerror = () => reject(request.error);
+                });
+                await new Promise((resolve, reject) => {
+                    const tx = db.transaction('settings', 'readwrite');
+                    tx.objectStore('settings').delete('printcost_firebase_config');
+                    tx.oncomplete = resolve;
+                    tx.onerror = () => reject(tx.error);
+                    tx.onabort = () => reject(tx.error);
+                });
+                db.close();
+            }
+        } catch (storageError) { console.warn('No se pudo borrar el respaldo de configuración Firebase:', storageError); }
+        const input = $('firebase-json-input');
+        if (input) input.value = '';
+        const account = $('cloud-sync-account');
+        if (account) account.textContent = '';
+        badge('local');
+        status('Modo local activado. La clave API de Firebase guardada no es válida; pega una configuración válida en Ajustes para activar la nube.', 'warn');
+        console.warn('PrintCost Pro ha vuelto al modo local porque la API de Firebase no es válida:', error);
+    }
+
+    function stop() {
+        if (unsub) { try { unsub(); } catch (e) {} unsub = null; }""",
+    1
+)
+
+new_sync = new_sync.replace(
+    """        } catch (e) { status('Error al sincronizar: ' + friendly(e), 'err'); badge('error', friendly(e)); }
+        finally { busy = false; }""",
+    """        } catch (e) {
+            if (isInvalidApiKey(e)) await returnToLocalMode(e);
+            else { status('Error al sincronizar: ' + friendly(e), 'err'); badge('error', friendly(e)); }
+        }
+        finally { busy = false; }""",
+    1
+)
+
+new_sync = new_sync.replace(
+    """        } catch (e) {
+            status('Error al conectar con los datos compartidos: ' + friendly(e), 'err');
+            badge('error', friendly(e));
+            scheduleSyncRetry(e);
+            return;
+        }""",
+    """        } catch (e) {
+            if (isInvalidApiKey(e)) { await returnToLocalMode(e); return; }
+            status('Error al conectar con los datos compartidos: ' + friendly(e), 'err');
+            badge('error', friendly(e));
+            scheduleSyncRetry(e);
+            return;
+        }""",
+    1
+)
+
+new_sync = new_sync.replace(
+    """        }, function (e) {
+            const detail = friendly(e);
+            status('Error de conexión con Firestore: ' + detail, 'err');
+            badge('error', detail);
+            scheduleSyncRetry(e);
+        });""",
+    """        }, function (e) {
+            if (isInvalidApiKey(e)) { returnToLocalMode(e); return; }
+            const detail = friendly(e);
+            status('Error de conexión con Firestore: ' + detail, 'err');
+            badge('error', detail);
+            scheduleSyncRetry(e);
+        });""",
+    1
+)
+
+new_sync = new_sync.replace(
+    """            } catch (e) {
+                status('No se pudo autorizar este dispositivo: ' + friendly(e), 'err'); badge('error', friendly(e));
+                const code = (e && e.code) || '';
+                if (!['auth/operation-not-allowed', 'auth/invalid-api-key', 'auth/app-deleted'].includes(code)) {
+                    scheduleAuthRetry();
+                }
+            } finally { authTransition = false; }""",
+    """            } catch (e) {
+                if (isInvalidApiKey(e)) { await returnToLocalMode(e); return; }
+                status('No se pudo autorizar este dispositivo: ' + friendly(e), 'err'); badge('error', friendly(e));
+                const code = (e && e.code) || '';
+                if (!['auth/operation-not-allowed', 'auth/invalid-api-key', 'auth/app-deleted'].includes(code)) {
+                    scheduleAuthRetry();
+                }
+            } finally { authTransition = false; }""",
+    1
+)
+
+new_sync = new_sync.replace(
+    """                authUnsub = auth.onAuthStateChanged(onUser, function (e) {
+                    status('Error de autenticación Firebase: ' + friendly(e), 'err');
+                    badge('error', friendly(e));
+                    scheduleAuthRetry();
+                });
+            } catch (e) {
+                status('No se pudo restaurar la sesión Firebase: ' + friendly(e), 'err');
+                badge('error', friendly(e));
+                scheduleAuthRetry();
+            }""",
+    """                authUnsub = auth.onAuthStateChanged(onUser, function (e) {
+                    if (isInvalidApiKey(e)) { returnToLocalMode(e); return; }
+                    status('Error de autenticación Firebase: ' + friendly(e), 'err');
+                    badge('error', friendly(e));
+                    scheduleAuthRetry();
+                });
+            } catch (e) {
+                if (isInvalidApiKey(e)) { await returnToLocalMode(e); return; }
+                status('No se pudo restaurar la sesión Firebase: ' + friendly(e), 'err');
+                badge('error', friendly(e));
+                scheduleAuthRetry();
+            }""",
+    1
+)
+
+required = [
+    "function isInvalidApiKey(e)",
+    "async function returnToLocalMode(error)",
+    "if (isInvalidApiKey(e)) await returnToLocalMode(e);",
+    "if (isInvalidApiKey(e)) { await returnToLocalMode(e); return; }"
+]
+for token in required:
+    if token not in new_sync:
+        raise SystemExit("No se pudo aplicar el ajuste de modo local: falta " + token)
+
 html = html[:start] + new_sync + html[end + len("\n})();"):]
 
 old_ui = r'''                    <p class="text-xs text-slate-500">Después de conectar Firebase, inicia sesión (o crea una cuenta) con tu email y contraseña. Usa la misma cuenta en cada dispositivo y tu catálogo, presupuestos y auditorías se mantendrán sincronizados.</p>
@@ -953,6 +1106,21 @@ firebase_bootstrap = r'''<script id="printcost-firebase-config-autorestore">
         finally { fieldRestoreRunning = false; }
     }
 
+
+    function setLocalMode(message) {
+        const b = document.getElementById('firebase-sync-badge');
+        if (b) {
+            b.className = 'bg-amber-100 text-amber-800 border border-amber-300 text-[11px] px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1.5';
+            b.innerHTML = '<i class="fa-solid fa-database"></i> LocalStorage';
+            b.title = 'Modo local: los datos se guardan en este dispositivo.';
+            b.setAttribute('aria-label', 'Modo local');
+        }
+        const status = document.getElementById('cloud-sync-status');
+        if (status) status.textContent = message || 'Modo local. No hay ninguna API de Firebase configurada.';
+        const account = document.getElementById('cloud-sync-account');
+        if (account) account.textContent = '';
+    }
+
     async function restoreWhenReady() {
         if (started) return;
         started = true;
@@ -967,13 +1135,6 @@ firebase_bootstrap = r'''<script id="printcost-firebase-config-autorestore">
                 typeof window.loadFirebaseSettings !== 'function' ||
                 typeof window.initFirebase !== 'function') {
                 throw new Error('No se pudo cargar el módulo Firebase. Recarga la aplicación.');
-            }
-
-            if (firebase.apps.length) {
-                if (window.__cloudSync && typeof window.__cloudSync.attach === 'function') {
-                    await window.__cloudSync.attach();
-                }
-                return;
             }
 
             let hasSavedConfig = false;
@@ -998,11 +1159,14 @@ firebase_bootstrap = r'''<script id="printcost-firebase-config-autorestore">
                     });
                 } catch (e) {}
             }
-            if (!hasSavedConfig) return;
+            if (!hasSavedConfig) { setLocalMode(); return; }
 
             await window.loadFirebaseSettings();
-            if (window.__cloudSync && typeof window.__cloudSync.attach === 'function' &&
-                firebase.apps && firebase.apps.length) {
+            if (!firebase.apps || !firebase.apps.length) {
+                setLocalMode('Modo local. No se ha podido inicializar Firebase; revisa el JSON de configuración y vuelve a conectarlo desde Ajustes.');
+                return;
+            }
+            if (window.__cloudSync && typeof window.__cloudSync.attach === 'function') {
                 await window.__cloudSync.attach();
             }
         } catch (e) {
@@ -1024,8 +1188,12 @@ firebase_bootstrap = r'''<script id="printcost-firebase-config-autorestore">
         document.addEventListener('DOMContentLoaded', launch, { once: true });
     } else launch();
     window.addEventListener('pageshow', function () {
-        if (window.firebase && firebase.apps && firebase.apps.length && window.__cloudSync) {
+        let hasSavedConfig = false;
+        try { hasSavedConfig = !!localStorage.getItem('printcost_firebase_config'); } catch (e) {}
+        if (hasSavedConfig && window.firebase && firebase.apps && firebase.apps.length && window.__cloudSync) {
             window.__cloudSync.attach();
+        } else if (!hasSavedConfig) {
+            setLocalMode();
         }
     });
 })();
