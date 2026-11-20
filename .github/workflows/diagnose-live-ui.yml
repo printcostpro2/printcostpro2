@@ -79,7 +79,8 @@ jobs:
           for i,s in enumerate(p.items):
               if not s["attrs"].get("src"):
                   content="".join(s["chunks"])
-                  print(f"INLINE_TAG_{i}_ID={s[\"attrs\"].get(\"id\",\"\")} TYPE={s[\"attrs\"].get(\"type\",\"\")} LEN={len(content)} END={content[-100:]!r}")
+                  attrs=s["attrs"]
+                  print("INLINE_TAG", i, "ID=", attrs.get("id", ""), "TYPE=", attrs.get("type", ""), "LEN=", len(content), "END=", repr(content[-100:]))
           PY
           failed=0
           for f in diagnostic/inline-*.js; do
