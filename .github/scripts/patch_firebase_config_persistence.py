@@ -598,9 +598,8 @@ for a, b in replacements.items():
         html = html.replace(a, b)
 # Remove obsolete login helpers from translations, if still present.
 html = html.replace('"Sincronizado": "Synced",', '"Sincronizado": "Synced",');
-if (!html.includes("signInAnonymously") || !html.includes("doc(SHARED_DOC)") || !html.includes("documentId == 'shared'")) {
+if "signInAnonymously" not in html or "doc(SHARED_DOC)" not in html or "documentId == 'shared'" not in html:
     raise SystemExit("La nueva sincronización anónima compartida no superó las comprobaciones; despliegue cancelado.")
-}
 
 
 TARGET.write_text(html, encoding="utf-8")
