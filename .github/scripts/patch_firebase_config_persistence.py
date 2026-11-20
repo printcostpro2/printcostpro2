@@ -628,7 +628,7 @@ if cleanup_marker not in html:
     let scheduled = false;
 
     function cleanText(value) {
-        return String(value || '').replace(/\\s+/g, ' ').trim();
+        return String(value || '').replace(/\s+/g, ' ').trim();
     }
 
     function findTitle(title) {
@@ -638,9 +638,9 @@ if cleanup_marker not in html:
 
     function looksLikeCard(el) {
         const classes = typeof el.className === 'string' ? el.className : '';
-        const rounded = /(?:^|\\s)rounded-(?:lg|xl|2xl)(?:\\s|$)/.test(classes);
-        const surface = /(?:^|\\s)bg-(?:white|slate-\\d+|gray-\\d+)(?:\\s|$)/.test(classes);
-        const edge = /(?:^|\\s)(?:border|shadow(?:-[\\w-]+)?)(?:\\s|$)/.test(classes);
+        const rounded = /(?:^|\s)rounded-(?:lg|xl|2xl)(?:\s|$)/.test(classes);
+        const surface = /(?:^|\s)bg-(?:white|slate-\d+|gray-\d+)(?:\s|$)/.test(classes);
+        const edge = /(?:^|\s)(?:border|shadow(?:-[\w-]+)?)(?:\s|$)/.test(classes);
         return rounded && (surface || edge);
     }
 
@@ -649,10 +649,18 @@ if cleanup_marker not in html:
         let fallback = heading.parentElement;
         for (let depth = 0; node && node !== document.body && depth < 12; depth++, node = node.parentElement) {
             const text = cleanText(node.textContent);
+            if (title === 'Sincronizar mis datos entre dispositivos' &&
+                text.includes('Sincronizar ahora') &&
+                text.includes('Esperando la autorización automática') &&
+                text.includes('No necesitas crear una cuenta') &&
+                !text.includes(keepTitle)) {
+                return node;
+            }
             if (title === 'Copia de Seguridad e Importación' &&
                 text.includes('Exportar JSON') &&
                 text.includes('Importar JSON') &&
-                text.includes('Vaciar Datos')) {
+                text.includes('Vaciar Datos') &&
+                !text.includes(keepTitle)) {
                 return node;
             }
             if (looksLikeCard(node)) {
