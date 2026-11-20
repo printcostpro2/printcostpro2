@@ -134,7 +134,7 @@ jobs:
             if(!await page.locator('#firebase-json-input').count())throw new Error('Falta configuración de Firebase');
             await page.locator('button[onclick="openAddPrinterModal()"]').first().click();
             if(!await page.locator('#printer-modal').evaluate(e=>!e.classList.contains('hidden')))throw new Error('No abre alta de impresora');
-            await page.locator('#printer-modal button[onclick="closeAddPrinterModal()"]').click();
+            await page.locator('#printer-modal button[onclick="closeAddPrinterModal()"]').first().click();
             console.log('LIVE_SMOKE_OK',{printers,pages,navigation:views.length,errors,consoleErrors,failed,bad});
             if(errors.length||consoleErrors.length||failed.length||bad.length)throw new Error('Errores en navegador '+JSON.stringify({errors,consoleErrors,failed,bad}));
             await browser.close();
