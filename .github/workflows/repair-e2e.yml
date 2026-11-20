@@ -1,0 +1,104 @@
+name: Repair PrintCost Pro UI tests
+
+on:
+  push:
+    branches:
+      - repair-production-20261120
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the complete source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s y/index.html
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          class P(HTMLParser):
+              def __init__(self): super().__init__(convert_charrefs=False); self.s=[]; self.c=None
+              def handle_starttag(self,t,a):
+                  if t.lower()=="script": self.c={"a":dict(a),"v":[]}
+              def handle_data(self,d):
+                  if self.c is not None: self.c["v"].append(d)
+              def handle_endtag(self,t):
+                  if t.lower()=="script" and self.c is not None: self.s.append(self.c); self.c=None
+          p=P(); p.feed(Path("y/index.html").read_text(encoding="utf-8"))
+          for i,s in enumerate(p.s):
+              typ=(s["a"].get("type") or "").lower()
+              if s["a"].get("src") or typ in ("application/json","application/ld+json","importmap"): continue
+              Path(f"/tmp/app-{i}.js").write_text("".join(s["v"]),encoding="utf-8")
+          print("INLINE_SCRIPTS",len(list(Path("/tmp").glob("app-*.js"))))
+          PY
+          for f in /tmp/app-*.js; do node --check "$f"; done
+          grep -q 'printcost-shared-anonymous-sync' y/index.html
+          grep -q 'signInAnonymously' y/index.html
+          grep -q 'documentId == .shared.' y/index.html
+          test "$(grep -o '"id":"bsd2026-' y/index.html | wc -l)" -eq 36
+      - name: Install browser
+        run: |
+          npm init -y >/dev/null
+          npm install --no-save playwright@1.56.0
+          npx playwright install --with-deps chromium
+      - name: Start local server and run browser tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8765 --directory y >/tmp/printcost-http.log 2>&1 &
+          echo $! >/tmp/printcost-http.pid
+          sleep 2
+          cat > /tmp/e2e.cjs <<'JS'
+          const {chromium}=require('playwright');
+          const crypto=require('crypto');
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            const context=await browser.newContext({viewport:{width:1600,height:1100}});
+            const page=await context.newPage();
+            const password='PrintCost-Test-2026', salt='automated-browser-test';
+            const hash=crypto.createHash('sha256').update(salt+':'+password).digest('hex');
+            await page.addInitScript(({salt,hash})=>localStorage.setItem('printcost_app_access_v1',JSON.stringify({salt,hash,version:1})),{salt,hash});
+            const errors=[],consoleErrors=[],failed=[],bad=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+            page.on('requestfailed',r=>failed.push(r.url()));
+            page.on('response',r=>{if(r.status()>=400)bad.push({status:r.status(),url:r.url()})});
+            const response=await page.goto('http://127.0.0.1:8765/index.html',{waitUntil:'domcontentloaded'});
+            await page.waitForTimeout(5000);
+            const count=await page.evaluate(()=>JSON.parse(localStorage.getItem('printcost_printers')||'[]').length);
+            if(response.status()!==200||count!==36)throw new Error('Carga inicial incorrecta: '+count);
+            await page.locator('#app-unlock-password').fill(password);
+            await page.locator('#app-lock-screen button[type=submit]').click();
+            await page.waitForFunction(()=>document.getElementById('app-lock-screen').classList.contains('hidden'));
+            const views=[['dashboard','nav-dashboard'],['catalog','nav-catalog'],['comparator','nav-comparator'],['quotes','nav-quotes'],['consumables','nav-consumables'],['top10','nav-top10'],['manualCalc','nav-manualCalc'],['tcoSim','nav-tcoSim'],['settings','nav-settings']];
+            for(const [view,nav] of views){
+              await page.locator('#'+nav).click();
+              const visible=await page.locator('#view-'+view).evaluate(e=>!e.classList.contains('hidden'));
+              if(!visible)throw new Error('No abre '+view);
+            }
+            await page.locator('#nav-catalog').click();
+            const cat=await page.evaluate(()=>({cards:document.querySelectorAll('#catalog-grid>*').length,pages:document.querySelectorAll('#catalog-pagination button').length}));
+            if(cat.cards!==6||cat.pages!==6)throw new Error('Paginación incorrecta '+JSON.stringify(cat));
+            const first=await page.locator('#catalog-grid').innerText();
+            await page.locator('#catalog-pagination button').nth(1).click();
+            if(first===(await page.locator('#catalog-grid').innerText()))throw new Error('No cambia página');
+            await page.locator('#nav-comparator').click();
+            if(await page.locator('#comp-select-0 option').count()<37)throw new Error('Comparador incompleto');
+            await page.locator('#comp-select-0').selectOption({index:1});
+            await page.locator('#nav-manualCalc').click();
+            if(await page.locator('#calc-printer-select option').count()<37)throw new Error('Calculadora incompleta');
+            await page.locator('#nav-settings').click();
+            if(!await page.locator('#firebase-json-input').count())throw new Error('Falta configuración Firebase JSON');
+            await page.locator('button[onclick="openAddPrinterModal()"]').first().click();
+            if(!await page.locator('#printer-modal').evaluate(e=>!e.classList.contains('hidden')))throw new Error('No abre alta de impresora');
+            console.log('E2E_OK',{printers:count,catalogPages:cat.pages,navigation:views.length,consoleErrors,errors,failed,bad});
+            if(errors.length||consoleErrors.length||failed.length||bad.length)throw new Error('Errores navegador '+JSON.stringify({errors,consoleErrors,failed,bad}));
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(2)});
+          JS
+          node /tmp/e2e.cjs
