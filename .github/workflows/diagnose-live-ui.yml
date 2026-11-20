@@ -108,7 +108,7 @@ jobs:
           set -euo pipefail
           npm init -y >/dev/null
           npm install --no-save playwright@1.56.0
-          npx playwright install --with-deps chromium
+          npx playwright install chromium
 
       - name: Test live page loading and inspect interactive controls
         shell: bash
@@ -124,7 +124,7 @@ jobs:
             page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });
             page.on('requestfailed', r => failedRequests.push({url:r.url(),error:r.failure()?.errorText}));
             page.on('response', r => { if (r.status() >= 400) badResponses.push({status:r.status(),url:r.url()}); });
-            const response = await page.goto('https://printcostpro2-b0737.web.app/index.html?pwtest=' + Date.now(), {waitUntil:'domcontentloaded',timeout:60000});
+            const response = await page.goto('https://printcostpro2-b0737--repaircheck20112026-j4ljci1w.web.app/index.html?pwtest=' + Date.now(), {waitUntil:'domcontentloaded',timeout:60000});
             await page.waitForTimeout(9000);
             const snapshot = await page.evaluate(() => {
               const vis = el => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
