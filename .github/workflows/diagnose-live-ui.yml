@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   diagnose:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Publish a candidate version to an isolated preview channel
@@ -108,7 +108,7 @@ jobs:
           set -euo pipefail
           npm init -y >/dev/null
           npm install --no-save playwright@1.56.0
-          npx playwright install chromium
+          npx playwright install --with-deps chromium
 
       - name: Test live page loading and inspect interactive controls
         shell: bash
