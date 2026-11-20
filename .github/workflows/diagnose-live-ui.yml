@@ -33,7 +33,7 @@ jobs:
           set -euo pipefail
           mkdir -p diagnostic
           curl --fail --silent --show-error --location --retry 3 \
-            "https://printcostpro2-b0737--repaircheck20112026.web.app/index.html?diagnostic=$(date +%s)" \
+            "https://printcostpro2-b0737--repaircheck20112026-j4ljci1w.web.app/index.html?diagnostic=$(date +%s)" \
             --output diagnostic/index.html
           test "$(wc -c < diagnostic/index.html)" -gt 100000
           echo "HTML_BYTES=$(wc -c < diagnostic/index.html)"
