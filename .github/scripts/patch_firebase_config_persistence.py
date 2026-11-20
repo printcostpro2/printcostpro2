@@ -226,9 +226,12 @@ if not already_patched:
 
 # Mostrar claramente que Firebase está conectado aunque aún no haya una cuenta iniciada.
 badge_old = "connected: [amber, 'fa-cloud', 'Firebase: sin sesión'],"
-badge_new = "connected: [amber, 'fa-cloud', 'Firebase conectado · Sin iniciar sesión'],"
+badge_previous = "connected: [amber, 'fa-cloud', 'Firebase conectado · Sin iniciar sesión'],"
+badge_new = "connected: [amber, 'fa-cloud', 'Firebase conectado · Preparando sincronización'],"
 if badge_old in html:
     html = html.replace(badge_old, badge_new, 1)
+elif badge_previous in html:
+    html = html.replace(badge_previous, badge_new, 1)
 elif badge_new not in html:
     raise SystemExit("No se encontró el indicador de estado esperado; despliegue cancelado.")
 
